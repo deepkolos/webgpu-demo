@@ -42,6 +42,9 @@ a {
   width: 150px;
   margin-bottom: 10px;
 }
+.demo-item.active {
+  border: 1px solid white;
+}
 
 .demo-item-preview {
 }

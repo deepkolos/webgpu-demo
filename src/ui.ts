@@ -19,7 +19,12 @@ const refs = {
 type Refs = typeof refs;
 
 let currDemo: Demo;
-const demos: Array<Demo> = [new DemoTriangle(), new DemoTriangleAntialias(), new DemoRenderBundle()];
+let currLink: HTMLElement;
+const demos: Array<Demo> = [
+  new DemoTriangle(),
+  new DemoTriangleAntialias(),
+  new DemoRenderBundle(),
+];
 
 // init demo list
 demos.forEach(demo => {
@@ -37,11 +42,15 @@ demos.forEach(demo => {
 
   link.onclick = () => {
     currDemo?.dispose();
+    currLink?.classList.remove('active');
     refs.listOption.innerHTML = '';
     demo.resize();
     demo.init(refs, genOptions);
     currDemo = demo;
+    currLink = link;
+    link.classList.add('active');
   };
+  link.href = `#?demo=${demo.name}`;
 
   refs.demos.push(link);
   refs.listDemo.append(link);
@@ -141,9 +150,10 @@ initContext(refs)
     resizeObsrever.observe(refs.gfx);
 
     try {
-      demos[0].resize();
-      demos[0].init(refs, genOptions);
-      currDemo = demos[0];
+      const urlParams = new URLSearchParams(location.hash ? location.hash.slice(1) : '');
+      const demoName = urlParams.get('demo');
+      const demoIndex = demos.findIndex(i => i.name == demoName);
+      refs.demos[demoIndex === -1 ? 0 : demoIndex].click();
     } catch (error) {
       console.error(error);
     }
