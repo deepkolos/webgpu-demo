@@ -55,7 +55,7 @@ export class DemoRenderBundle implements Demo {
       ],
     });
 
-    const pipeline = device.createRenderPipeline({
+    const pipeline = await device.createRenderPipelineAsync({
       layout: device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
       }),

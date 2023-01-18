@@ -4,6 +4,7 @@ import { Demo } from './demos/demo';
 import { DemoTriangle } from './demos/triangle';
 import { DemoTriangleAntialias } from './demos/triangleAntialias';
 import { DemoRenderBundle } from './demos/renderBundle';
+import { DemoTriangleRotating } from './demos/triangleRotating';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -24,6 +25,7 @@ const demos: Array<Demo> = [
   new DemoTriangle(),
   new DemoTriangleAntialias(),
   new DemoRenderBundle(),
+  new DemoTriangleRotating(),
 ];
 
 // init demo list

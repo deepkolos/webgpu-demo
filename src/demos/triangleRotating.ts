@@ -26,17 +26,23 @@ const uniformData = new Float32Array([
   0.8, 0.2, 0.8, 1.0,
 ]);
 
-export class DemoTriangle implements Demo {
-  name = 'Triangle';
+export class DemoTriangleRotating implements Demo {
+  name = 'TriangleRotating';
   preview = '';
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
   bindGroup!: GPUBindGroup;
-  buffers!: { positionBuffer: GPUBuffer; indexBuffer: GPUBuffer; colorBuffer: GPUBuffer };
+  buffers!: {
+    positionBuffer: GPUBuffer;
+    indexBuffer: GPUBuffer;
+    colorBuffer: GPUBuffer;
+    uniformBuffer: GPUBuffer;
+  };
   disposed = false;
   pipeline!: GPURenderPipeline;
   lastSubmitWorkDonePromise?: Promise<undefined>;
   lastRAF!: number;
+  rotateZ = 0;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     // layout
@@ -115,7 +121,7 @@ export class DemoTriangle implements Demo {
     const uniformBuffer = device.createBuffer({
       mappedAtCreation: true,
       size: (uniformData.byteLength + 3) & ~3,
-      usage: GPUBufferUsage.UNIFORM,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     new Float32Array(uniformBuffer.getMappedRange()).set(uniformData);
     uniformBuffer.unmap();
@@ -132,7 +138,7 @@ export class DemoTriangle implements Demo {
 
     this.bindGroup = bindGourp;
     this.pipeline = pipeline;
-    this.buffers = { positionBuffer, indexBuffer, colorBuffer };
+    this.buffers = { positionBuffer, indexBuffer, colorBuffer, uniformBuffer };
     this.disposed = false;
 
     const canvasConfig: GPUCanvasConfiguration = {
@@ -160,10 +166,39 @@ export class DemoTriangle implements Demo {
     Promise.resolve(this.lastSubmitWorkDonePromise).then(() => oldTexture?.destroy());
   }
 
-  render = () => {
+  render = async () => {
     if (this.disposed) return;
     const colorTexture = canvasCtx.getCurrentTexture();
     const colorView = colorTexture.createView();
+
+    this.rotateZ += 0.025;
+    // 更新uniform matrix 先尝试按照列主序
+    const c = Math.cos(this.rotateZ),
+      s = Math.sin(this.rotateZ);
+    uniformData[0] = c;
+    uniformData[1] = s;
+    uniformData[4] = -s;
+    uniformData[5] = c;
+    // 不是行主序, 还是列主序
+    // uniformData[3] = (uniformData[3] + 0.02) % 1;
+    // uniformData[7] = (uniformData[7] + 0.02) % 1;
+    uniformData[12] = (uniformData[12] + 0.02) % 1;
+    uniformData[13] = (uniformData[13] + 0.02) % 1;
+
+    // 更新UBO
+    // writeBuffer 和 getMappedRange 的方式写入buffer有什么区别?
+    queue.writeBuffer(
+      this.buffers.uniformBuffer,
+      0,
+      uniformData.buffer,
+      uniformData.byteOffset,
+      uniformData.byteLength,
+    );
+    // getMappedRange的写入, 只支持非uniform? 给compute shader的用的?
+    // BufferUsage::MapRead the only other allowed usage is BufferUsage::CopyDst
+    // await this.buffers.uniformBuffer.mapAsync(GPUMapMode.READ);
+    // new Float32Array(this.buffers.uniformBuffer.getMappedRange()).set(uniformData);
+    // this.buffers.uniformBuffer.unmap();
 
     const commanderEncoder = device.createCommandEncoder();
     const passEncoder = commanderEncoder.beginRenderPass({
