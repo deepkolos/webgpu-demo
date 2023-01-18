@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebGPU Hello Triangle</title>
+  </head>
+  <body>
+    <div class="plane left">
+      <div class="list demo"></div>
+    </div>
+    <div class="plane middle">
+      <canvas id="gfx"></canvas>
+    </div>
+    <div class="plane right">
+      <div class="list option"></div>
+    </div>
+    <div class="error-unsupport">
+      浏览器不支持WebGPU
+    </div>
+
+    <script type="module" src="/src/ui.ts"></script>
+    <!-- <script type="module" src="/src/main.ts"></script> -->
+  </body>
+</html>
