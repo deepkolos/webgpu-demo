@@ -79,6 +79,13 @@ a {
   display: block;
 }
 
+.stats {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: white;
+}
+
 /* PC */
 @media screen and (min-width: 800px) {
   .plane.left {
@@ -95,4 +102,10 @@ a {
 @media screen and (max-width: 800px) and (min-width: 450px) {
 }
 @media screen and (max-width: 450px) {
+  .plane.left {
+    display: none;
+  }
+  .plane.right {
+    display: none;
+  }
 }

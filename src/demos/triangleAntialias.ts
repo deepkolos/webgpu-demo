@@ -1,20 +1,22 @@
 import { canvasCtx, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
-import { Demo } from './demo';
-import vertShaderCode from '../shaders/triangle.vert.wgsl?raw';
-import fragShaderCode from '../shaders/triangle.frag.wgsl?raw';
+import { Demo, loadImageBitmap } from './demo';
+import vertShaderCode from '../shaders/triangle-texture.vert.wgsl?raw';
+import fragShaderCode from '../shaders/triangle-texture.frag.wgsl?raw';
+// import { tail1Img } from '../assets/tail-img';
+import logoImg from '../assets/douyin-logo-white.png';
 
 // prettier-ignore
 const positions = new Float32Array([
-  1.0, -1.0, 0.0, 
-  -1.0, -1.0, 0.0, 
-  0.0, 1.0, 0.0
+  1.0, -1.0, 0.0, // bottom-right
+  -1.0, -1.0, 0.0, // bottom-left
+  -1.0, 1.0, 0.0, // top-left
 ]);
 // prettier-ignore
-const colors = new Float32Array([
-  0.0, 1.0, 0.0, // 🟢
-  0.0, 0.0, 1.0, // 🔵
-  1.0, 0.0, 0.0, // 🔴
+const uvs = new Float32Array([
+  1.0, 0.0,
+  0.0, 0.0,
+  0.0, 1.0,
 ]);
 const indices = new Uint16Array([0, 1, 2]);
 const uniformData = new Float32Array([
@@ -44,13 +46,9 @@ export class DemoTriangleAntialias implements Demo {
     // layout
     const bindGroupLayout = device.createBindGroupLayout({
       entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: {
-            type: 'uniform',
-          },
-        },
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
       ],
     });
 
@@ -68,8 +66,8 @@ export class DemoTriangleAntialias implements Demo {
             stepMode: 'vertex',
           },
           {
-            arrayStride: 4 * 3,
-            attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x3' }],
+            arrayStride: 4 * 2,
+            attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x2' }],
             stepMode: 'vertex',
           },
         ],
@@ -77,7 +75,24 @@ export class DemoTriangleAntialias implements Demo {
       fragment: {
         module: device.createShaderModule({ code: fragShaderCode }),
         entryPoint: 'main',
-        targets: [{ format: 'bgra8unorm' }],
+        targets: [
+          {
+            format: 'bgra8unorm',
+            blend: {
+              color: {
+                operation: 'add',
+                srcFactor: 'src-alpha',
+                dstFactor: 'dst-alpha',
+              },
+              alpha: {
+                // operation: 'add',
+                // srcFactor: 'one-minus-src-alpha',
+                // dstFactor: 'one-minus-dst-alpha',
+              },
+            },
+            writeMask: GPUColorWrite.ALL,
+          },
+        ],
       },
       primitive: {
         topology: 'triangle-list',
@@ -101,13 +116,13 @@ export class DemoTriangleAntialias implements Demo {
     new Float32Array(positionBuffer.getMappedRange()).set(positions);
     positionBuffer.unmap();
 
-    const colorBuffer = device.createBuffer({
+    const uvBuffer = device.createBuffer({
       mappedAtCreation: true,
-      size: (colors.byteLength + 3) & ~3,
+      size: (uvs.byteLength + 3) & ~3,
       usage: GPUBufferUsage.VERTEX,
     });
-    new Float32Array(colorBuffer.getMappedRange()).set(colors);
-    colorBuffer.unmap();
+    new Float32Array(uvBuffer.getMappedRange()).set(uvs);
+    uvBuffer.unmap();
 
     const indexBuffer = device.createBuffer({
       mappedAtCreation: true,
@@ -125,19 +140,39 @@ export class DemoTriangleAntialias implements Demo {
     new Float32Array(uniformBuffer.getMappedRange()).set(uniformData);
     uniformBuffer.unmap();
 
+    const colorImageBitmap = await loadImageBitmap(logoImg);
+    const colorTexture = device.createTexture({
+      size: [colorImageBitmap.width, colorImageBitmap.height, 1],
+      format: 'rgba8unorm',
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.COPY_DST |
+        GPUTextureUsage.TEXTURE_BINDING,
+    });
+    const colorTextureView = colorTexture.createView();
+    const colorTextureSampler = device.createSampler({
+      minFilter: 'nearest',
+      magFilter: 'nearest',
+    });
+
+    // 这个是同步还是异步方法?
+    queue.copyExternalImageToTexture({ source: colorImageBitmap }, { texture: colorTexture }, [
+      colorImageBitmap.width,
+      colorImageBitmap.height,
+    ]);
+
     const bindGourp = device.createBindGroup({
       layout: bindGroupLayout,
       entries: [
-        {
-          binding: 0,
-          resource: { buffer: uniformBuffer },
-        },
+        { binding: 0, resource: { buffer: uniformBuffer } },
+        { binding: 1, resource: colorTextureSampler },
+        { binding: 2, resource: colorTextureView },
       ],
     });
 
     this.bindGroup = bindGourp;
     this.pipeline = pipeline;
-    this.buffers = { positionBuffer, indexBuffer, colorBuffer };
+    this.buffers = { positionBuffer, indexBuffer, colorBuffer: uvBuffer };
     this.disposed = false;
 
     const canvasConfig: GPUCanvasConfiguration = {
@@ -188,7 +223,7 @@ export class DemoTriangleAntialias implements Demo {
         {
           view: this.colorTextureView,
           resolveTarget: canvasCtx.getCurrentTexture().createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: 'clear',
           storeOp: 'store',
         },

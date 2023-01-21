@@ -11,7 +11,7 @@ export async function initContext(refs: Refs) {
   if (!entry) return false;
 
   // 🔌 Physical Device Adapter
-  adapter = (await entry.requestAdapter({ forceFallbackAdapter: true }))!;
+  adapter = (await entry.requestAdapter({ forceFallbackAdapter: false }))!;
 
   adapter.requestAdapterInfo().then(console.log);
   // 💻 Logical Device

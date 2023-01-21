@@ -5,6 +5,7 @@ import { DemoTriangle } from './demos/triangle';
 import { DemoTriangleAntialias } from './demos/triangleAntialias';
 import { DemoRenderBundle } from './demos/renderBundle';
 import { DemoTriangleRotating } from './demos/triangleRotating';
+import { DemoMeshline } from './demos/meshline';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -26,6 +27,7 @@ const demos: Array<Demo> = [
   new DemoTriangleAntialias(),
   new DemoRenderBundle(),
   new DemoTriangleRotating(),
+  new DemoMeshline(),
 ];
 
 // init demo list
@@ -139,6 +141,7 @@ type GenOptions = typeof genOptions;
 initContext(refs)
   .then(() => {
     // resize
+    // const devicePixelRatio = 1;
     refs.gfx.width = refs.gfx.clientWidth * devicePixelRatio;
     refs.gfx.height = refs.gfx.clientHeight * devicePixelRatio;
     const resizeObsrever = new ResizeObserver(entries => {
