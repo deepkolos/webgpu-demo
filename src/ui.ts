@@ -52,6 +52,7 @@ demos.forEach(demo => {
     demo.init(refs, genOptions);
     currDemo = demo;
     currLink = link;
+    document.title = `${demo.name} WebGPU Demo`;
     link.classList.add('active');
   };
   link.href = `#?demo=${demo.name}`;
@@ -159,6 +160,7 @@ initContext(refs)
       const demoName = urlParams.get('demo');
       const demoIndex = demos.findIndex(i => i.name == demoName);
       refs.demos[demoIndex === -1 ? 0 : demoIndex].click();
+      if (demoName) document.title = `${demoName} WebGPU Demo`;
     } catch (error) {
       console.error(error);
     }
