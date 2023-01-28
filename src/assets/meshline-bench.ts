@@ -10,7 +10,7 @@ export default {
     weight3: 9.8,
   },
   type: 2,
-  count: 10000,
+  count: 1000,
   width: 0.4,
   length: 20,
   // vRange: [1, 1],
