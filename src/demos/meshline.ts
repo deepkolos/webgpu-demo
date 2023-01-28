@@ -110,7 +110,7 @@ export class DemoMeshline implements Demo {
         // topology: 'point-list',
         // topology: 'line-list',
         // topology: 'line-strip',
-        cullMode: 'none',
+        cullMode: 'back',
         frontFace: 'ccw',
       },
       depthStencil: {
