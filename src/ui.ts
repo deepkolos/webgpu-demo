@@ -6,6 +6,7 @@ import { DemoTriangleAntialias } from './demos/triangleAntialias';
 import { DemoRenderBundle } from './demos/renderBundle';
 import { DemoTriangleRotating } from './demos/triangleRotating';
 import { DemoMeshline } from './demos/meshline';
+import { DemoBitonicSorter } from './demos/bitonicSorter';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -28,6 +29,7 @@ const demos: Array<Demo> = [
   new DemoRenderBundle(),
   new DemoTriangleRotating(),
   new DemoMeshline(),
+  new DemoBitonicSorter(),
 ];
 
 // init demo list
