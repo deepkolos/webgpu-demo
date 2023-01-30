@@ -6,50 +6,14 @@ export class DemoBitonicSorter implements Demo {
   preview = '';
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
-    drawBMSDiagram(16, [2, 2, 2], 4);
+    drawBMSDiagram(32, 4);
   }
   resize(): void {}
   dispose(): void {}
 }
 
-function drawBMSDiagram(
-  arrLenPowerOfTwo: number,
-  maxWorkGroupSize: [number, number, number],
-  maxInvocationsPerWorkGroup: number,
-) {
-  const invocationsNeedPerStep = arrLenPowerOfTwo * 0.5;
+function drawBMSDiagram(arrLenPowerOfTwo: number, maxInvocationsPerWorkGroup: number) {
   const maxH = arrLenPowerOfTwo;
-  const maxInvocationsPerWorkGroupPO2 = Math.pow(2, ~~Math.log2(maxInvocationsPerWorkGroup));
-  const dispatchArgsMap = new Map<
-    number,
-    { invocation: number; workgroup: [number, number, number] }
-  >();
-
-  const getDispatchArgs = (h: number) => {
-    let dispatchArgs = dispatchArgsMap.get(h);
-    if (!dispatchArgs) {
-      if (invocationsNeedPerStep <= maxInvocationsPerWorkGroupPO2) {
-        dispatchArgs = { invocation: invocationsNeedPerStep, workgroup: [1, 1, 1] };
-      } else {
-        const workgroupTotalSize = invocationsNeedPerStep / maxInvocationsPerWorkGroupPO2;
-        const invocation = maxInvocationsPerWorkGroupPO2;
-        const [x, y, z] = maxWorkGroupSize;
-        // 均分到x y z限制里
-        if (x >= workgroupTotalSize) {
-          dispatchArgs = { invocation, workgroup: [workgroupTotalSize, 1, 1] };
-        } else if (x + y >= workgroupTotalSize) {
-          dispatchArgs = { invocation, workgroup: [x, workgroupTotalSize - x, 1] };
-        } else if (x + y + z >= workgroupTotalSize) {
-          dispatchArgs = { invocation, workgroup: [x, y, workgroupTotalSize - x - y] };
-        } else {
-          throw new Error('get dispatch args fail: invocations exceed limitations');
-          // 一个step被分配到多个也是可以?
-        }
-      }
-      dispatchArgsMap.set(h, dispatchArgs);
-    }
-    return dispatchArgs;
-  };
 
   // calc step indices
   let stepIndex = -1;
@@ -78,35 +42,45 @@ function drawBMSDiagram(
 
   for (let upH = 2; upH <= maxH; upH *= 2) {
     stepIndex++;
-    const dispatchArgs = getDispatchArgs(upH);
-    console.log('BMS step', stepIndex, upH, dispatchArgs);
     plot(upH, 'flip');
     colCount += 1 + upH * 0.5;
 
     for (let downH = upH * 0.5; downH >= 2; downH *= 0.5) {
       stepIndex++;
-      const dispatchArgs = getDispatchArgs(downH);
-      console.log('BMS step', stepIndex, downH, dispatchArgs);
       plot(downH, 'disperse');
       colCount += 1 + downH * 0.5;
     }
   }
-  console.log('BMS step count', stepIndex + 1);
 
   // draw diagram
+  console.log(`BMS arrLen: ${arrLenPowerOfTwo} step count: ${stepIndex + 1}`);
   const rowCount = maxH * 2;
-  console.log('BMS plot', `${rowCount}x${colCount}`);
-
   let plotStr = '';
   for (let row = 0; row < rowCount - 1; row++) {
     for (let col = 0; col < colCount - 1; col++) {
-      if (plotData[col]) {
-        plotStr += plotData[col][row] || ' ';
-      } else {
-        plotStr += '\t';
-      }
+      plotStr += plotData[col] ? plotData[col][row] || ' ' : '\t';
     }
     plotStr += '\n';
   }
   console.log(plotStr);
+
+  // calc dispatch
+  let lastStepLen = 0;
+  let ex = 0;
+  const maxParallelLen = maxInvocationsPerWorkGroup * 2;
+  for (let len = 2; len <= maxH; len *= 2, ex++) {
+    const currStepLen = lastStepLen + 1 + ex;
+    lastStepLen = currStepLen;
+    if (len < maxParallelLen) continue;
+    else if (len === maxParallelLen) {
+      console.log(`BMS local_bms\t l: ${len}\t ex: ${ex}`);
+    } else {
+      console.log(`BMS big_flip\t l: ${len}\t ex: ${ex}`);
+      let downH = len * 0.5;
+      for (; downH > maxParallelLen; downH *= 0.5) {
+        console.log(`BMS big_disp\t l: ${downH}\t ex: ${ex}`);
+      }
+      console.log(`BMS local_disp\t l: ${downH}\t ex: ${ex}`);
+    }
+  }
 }
