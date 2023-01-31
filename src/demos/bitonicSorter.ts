@@ -67,7 +67,7 @@ export class DemoBitonicSorter implements Demo {
       },
       dataSize: {
         value: this.opts.dataSize,
-        range: [1, 40],
+        range: [1, 24],
         onChange: async (v: number, els: Els, opt: Options, optName: string) => {
           this.opts.dataSize = v;
           els.label.innerText = `${optName}(${Math.pow(2, v)})`;
