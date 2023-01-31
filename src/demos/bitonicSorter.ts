@@ -1,15 +1,157 @@
+import { device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
 import { Demo } from './demo';
+import BMSComputeShader from '../shaders/bms.compute.wgsl?raw';
+
+const invoc_num = 4;
+const invoc_h = invoc_num * 2;
+
+enum Kernel {
+  local_bms = 0,
+  local_disp = 2,
+  storage_flip_once = 1,
+  storage_disp_once = 3,
+}
 
 export class DemoBitonicSorter implements Demo {
   name = 'BitonicSorter';
   preview = '';
+  bindGroup!: GPUBindGroup;
+  pipeline!: GPUComputePipeline;
+  buffers!: { listBuffer: GPUBuffer; listStagingBuffer: GPUBuffer; uniformBuffer: GPUBuffer };
+  listLen!: number;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
-    drawBMSDiagram(32, 4);
+    drawBMSDiagram(16, invoc_num);
+
+    // layout
+    const bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+      ],
+    });
+    const pipeline = device.createComputePipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+      compute: {
+        module: device.createShaderModule({ code: BMSComputeShader }),
+        entryPoint: 'main',
+        constants: { invoc_num, invoc_h },
+      },
+    });
+
+    // resources
+    const listBufferData = new Float32Array([
+      15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+    ]);
+    const listBuffer = device.createBuffer({
+      size: (listBufferData.byteLength + 3) & ~3,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+      mappedAtCreation: true,
+    });
+    new Float32Array(listBuffer.getMappedRange()).set(listBufferData);
+    listBuffer.unmap();
+
+    const listStagingBuffer = device.createBuffer({
+      size: (listBufferData.byteLength + 3) & ~3,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    // ubo
+    const uniformBufferData = new Uint32Array(2);
+    const uniformBuffer = device.createBuffer({
+      size: (uniformBufferData.byteLength + 3) & ~3,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Uint32Array(uniformBuffer.getMappedRange()).set(uniformBufferData);
+    uniformBuffer.unmap();
+
+    const bindGroup = device.createBindGroup({
+      layout: bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: listBuffer } },
+        { binding: 1, resource: { buffer: uniformBuffer } },
+      ],
+    });
+
+    this.bindGroup = bindGroup;
+    this.pipeline = pipeline;
+    this.buffers = { listBuffer, listStagingBuffer, uniformBuffer };
+    this.listLen = listBufferData.length;
+
+    this.compute();
+  }
+
+  async dispatch(workgroupX: number, kernel: Kernel, workH: number) {
+    console.log(`BMS dispatch kernel: ${kernel} workH: ${workH}`);
+    const ubo = new Uint32Array([kernel, workH]);
+    queue.writeBuffer(this.buffers.uniformBuffer, 0, ubo.buffer, ubo.byteOffset, ubo.byteLength);
+    const commandEncoder = device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginComputePass({});
+    passEncoder.setPipeline(this.pipeline);
+    passEncoder.setBindGroup(0, this.bindGroup);
+    passEncoder.dispatchWorkgroups(workgroupX);
+    passEncoder.end();
+    commandEncoder.copyBufferToBuffer(
+      this.buffers.listBuffer,
+      0,
+      this.buffers.listStagingBuffer,
+      0,
+      this.buffers.listBuffer.size,
+    );
+    queue.submit([commandEncoder.finish()]);
+
+    await this.readList();
+  }
+
+  async compute() {
+    const workgroupX = Math.ceil((this.listLen * 0.5) / invoc_num);
+    console.log('workgroupX', workgroupX);
+
+    // calc dispatch
+    let lastStepLen = 0;
+    let ex = 0;
+    const maxParallelLen = invoc_num * 2;
+    for (let len = 2; len <= this.listLen; len *= 2, ex++) {
+      const currStepLen = lastStepLen + 1 + ex;
+      lastStepLen = currStepLen;
+      if (len < maxParallelLen) continue;
+      else if (len === maxParallelLen) {
+        await this.dispatch(workgroupX, Kernel.local_bms, len);
+      } else {
+        await this.dispatch(workgroupX, Kernel.storage_flip_once, len);
+        let downH = len * 0.5;
+        for (; downH > maxParallelLen; downH *= 0.5) {
+          await this.dispatch(workgroupX, Kernel.storage_disp_once, downH);
+        }
+        await this.dispatch(workgroupX, Kernel.local_disp, downH);
+      }
+    }
+
+    // const commandEncoder = device.createCommandEncoder();
+    // commandEncoder.copyBufferToBuffer(
+    //   this.buffers.listBuffer,
+    //   0,
+    //   this.buffers.listStagingBuffer,
+    //   0,
+    //   this.buffers.listBuffer.size,
+    // );
+    // queue.submit([commandEncoder.finish()]);
+
+    // await this.readList();
+  }
+  async readList() {
+    await this.buffers.listStagingBuffer.mapAsync(GPUMapMode.READ);
+    const output = new Float32Array(this.buffers.listStagingBuffer.getMappedRange()).slice();
+    console.log(output);
+    this.buffers.listStagingBuffer.unmap();
+    return output;
   }
   resize(): void {}
-  dispose(): void {}
+  dispose(): void {
+    // TODO
+  }
 }
 
 function drawBMSDiagram(arrLenPowerOfTwo: number, maxInvocationsPerWorkGroup: number) {
