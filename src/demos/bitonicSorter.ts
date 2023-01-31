@@ -28,6 +28,7 @@ export class DemoBitonicSorter implements Demo {
   opts!: { invocation: number; dataSize: number };
   listData!: number[];
   csm!: GPUShaderModule;
+  infoNode!: HTMLPreElement;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     // layout
@@ -53,11 +54,15 @@ export class DemoBitonicSorter implements Demo {
     this.bindGroupLayout = bindGroupLayout;
     this.uniformBuffer = uniformBuffer;
 
-    this.opts = { invocation: 8, dataSize: 24 };
+    this.opts = { invocation: 8, dataSize: 20 };
+
+    this.initUI(refs, genOptions);
 
     await this.prepare();
     this.lastCompute = this.compute();
+  }
 
+  initUI(refs: Refs, genOptions: GenOptions) {
     genOptions({
       invocation: {
         value: this.opts.invocation,
@@ -80,6 +85,10 @@ export class DemoBitonicSorter implements Demo {
         },
       },
     });
+    const info = document.createElement('pre');
+    info.style.fontSize = '14px';
+    refs.listOption.append(info);
+    this.infoNode = info;
   }
 
   async prepare() {
@@ -213,26 +222,19 @@ export class DemoBitonicSorter implements Demo {
     const sorted = await this.readList();
     const endT = performance.now();
     console.log('output', sorted);
-    console.log(
-      'BMS Compute',
-      performance
-        .measure('BMS Compute', {
-          start: startT,
-          end: endT,
-        })
-        .duration.toFixed(2) + 'ms',
-    );
+    const BMSCost =
+      'BMS GPU ' +
+      performance.measure('BMS Compute', { start: startT, end: endT }).duration.toFixed(2) +
+      'ms';
+    console.log(BMSCost);
 
     this.listData.sort((a, b) => a - b);
-    console.log(
-      'JS Sort',
-      performance
-        .measure('JS Sort', {
-          start: endT,
-          end: performance.now(),
-        })
-        .duration.toFixed(2) + 'ms',
-    );
+    const JSSortCost =
+      'JS Sort ' +
+      performance.measure('JS Sort', { start: endT, end: performance.now() }).duration.toFixed(2) +
+      'ms';
+    console.log(JSSortCost);
+    this.infoNode.innerText = `${BMSCost}\n${JSSortCost}`;
   }
 
   async readList(log = false) {
