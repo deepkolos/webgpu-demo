@@ -1,10 +1,7 @@
-import { device, queue } from '../context';
-import { GenOptions, Refs } from '../ui';
+import { adapter, device, queue } from '../context';
+import { GenOptions, Refs, Els, Options } from '../ui';
 import { Demo } from './demo';
 import BMSComputeShader from '../shaders/bms.compute.wgsl?raw';
-
-const invoc_num = 4;
-const invoc_h = invoc_num * 2;
 
 enum Kernel {
   local_bms = 0,
@@ -12,7 +9,9 @@ enum Kernel {
   storage_flip_once = 1,
   storage_disp_once = 3,
 }
-
+/**
+ * tutorial https://poniesandlight.co.uk/reflect/bitonic_merge_sort/
+ */
 export class DemoBitonicSorter implements Demo {
   name = 'BitonicSorter';
   preview = '';
@@ -20,10 +19,15 @@ export class DemoBitonicSorter implements Demo {
   pipeline!: GPUComputePipeline;
   buffers!: { listBuffer: GPUBuffer; listStagingBuffer: GPUBuffer; uniformBuffer: GPUBuffer };
   listLen!: number;
+  debug = false;
+  lastCompute!: Promise<void>;
+  bindGroupLayout!: GPUBindGroupLayout;
+  uniformBuffer!: GPUBuffer;
+  invocNum = 4;
+  opts!: { invocation: number; dataSize: number };
+  listData!: number[];
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
-    drawBMSDiagram(16, invoc_num);
-
     // layout
     const bindGroupLayout = device.createBindGroupLayout({
       entries: [
@@ -31,19 +35,76 @@ export class DemoBitonicSorter implements Demo {
         { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
     });
+
+    // ubo
+    const uniformBufferData = new Uint32Array(2);
+    const uniformBuffer = device.createBuffer({
+      size: (uniformBufferData.byteLength + 3) & ~3,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Uint32Array(uniformBuffer.getMappedRange()).set(uniformBufferData);
+    uniformBuffer.unmap();
+
+    this.bindGroupLayout = bindGroupLayout;
+    this.uniformBuffer = uniformBuffer;
+
+    this.opts = { invocation: 8, dataSize: 24 };
+
+    await this.prepare();
+    this.lastCompute = this.compute();
+
+    genOptions({
+      invocation: {
+        value: this.opts.invocation,
+        range: [1, Math.log2(adapter.limits.maxComputeInvocationsPerWorkgroup)],
+        onChange: async (v: number, els: Els, opt: Options, optName: string) => {
+          this.opts.invocation = v;
+          els.label.innerText = `${optName}(${Math.pow(2, v)})`;
+          await this.prepare();
+          this.lastCompute = this.compute();
+        },
+      },
+      dataSize: {
+        value: this.opts.dataSize,
+        range: [1, 40],
+        onChange: async (v: number, els: Els, opt: Options, optName: string) => {
+          this.opts.dataSize = v;
+          els.label.innerText = `${optName}(${Math.pow(2, v)})`;
+          await this.prepare();
+          this.lastCompute = this.compute();
+        },
+      },
+    });
+  }
+
+  async prepare() {
+    await this.lastCompute;
+    this.buffers?.listBuffer.destroy();
+    this.buffers?.listStagingBuffer.destroy();
+    // this.buffers?.uniformBuffer.destroy();
+
+    const invocNum = Math.pow(2, this.opts.invocation);
+    const dataSize = Math.pow(2, this.opts.dataSize);
+
+    if (dataSize <= 32) drawBMSDiagram(dataSize, invocNum);
+    else if (this.debug) console.log('BMS will not draw when data size exceed 32');
+
     const pipeline = device.createComputePipeline({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+      layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
       compute: {
         module: device.createShaderModule({ code: BMSComputeShader }),
         entryPoint: 'main',
-        constants: { invoc_num, invoc_h },
+        constants: { invoc_num: invocNum, invoc_h: invocNum * 2 },
       },
     });
 
-    // resources
-    const listBufferData = new Float32Array([
-      15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
-    ]);
+    const listData = new Array(dataSize)
+      .fill(0)
+      .map((v, k) => k)
+      .sort((a, b) => b - a);
+    this.listData = listData;
+    const listBufferData = new Float32Array(listData);
     const listBuffer = device.createBuffer({
       size: (listBufferData.byteLength + 3) & ~3,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
@@ -57,34 +118,23 @@ export class DemoBitonicSorter implements Demo {
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
-    // ubo
-    const uniformBufferData = new Uint32Array(2);
-    const uniformBuffer = device.createBuffer({
-      size: (uniformBufferData.byteLength + 3) & ~3,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      mappedAtCreation: true,
-    });
-    new Uint32Array(uniformBuffer.getMappedRange()).set(uniformBufferData);
-    uniformBuffer.unmap();
-
     const bindGroup = device.createBindGroup({
-      layout: bindGroupLayout,
+      layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: listBuffer } },
-        { binding: 1, resource: { buffer: uniformBuffer } },
+        { binding: 1, resource: { buffer: this.uniformBuffer } },
       ],
     });
 
+    this.buffers = { listBuffer, listStagingBuffer, uniformBuffer: this.uniformBuffer };
+    this.listLen = dataSize;
     this.bindGroup = bindGroup;
     this.pipeline = pipeline;
-    this.buffers = { listBuffer, listStagingBuffer, uniformBuffer };
-    this.listLen = listBufferData.length;
-
-    this.compute();
+    this.invocNum = invocNum;
   }
 
   async dispatch(workgroupX: number, kernel: Kernel, workH: number) {
-    console.log(`BMS dispatch kernel: ${kernel} workH: ${workH}`);
+    this.debug && console.log(`BMS dispatch kernel: ${kernel} workH: ${workH}`);
     const ubo = new Uint32Array([kernel, workH]);
     queue.writeBuffer(this.buffers.uniformBuffer, 0, ubo.buffer, ubo.byteOffset, ubo.byteLength);
     const commandEncoder = device.createCommandEncoder();
@@ -93,26 +143,29 @@ export class DemoBitonicSorter implements Demo {
     passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.dispatchWorkgroups(workgroupX);
     passEncoder.end();
-    commandEncoder.copyBufferToBuffer(
-      this.buffers.listBuffer,
-      0,
-      this.buffers.listStagingBuffer,
-      0,
-      this.buffers.listBuffer.size,
-    );
+    this.debug &&
+      commandEncoder.copyBufferToBuffer(
+        this.buffers.listBuffer,
+        0,
+        this.buffers.listStagingBuffer,
+        0,
+        this.buffers.listBuffer.size,
+      );
+
     queue.submit([commandEncoder.finish()]);
 
-    await this.readList();
+    this.debug && (await this.readList(true));
   }
 
   async compute() {
-    const workgroupX = Math.ceil((this.listLen * 0.5) / invoc_num);
+    const startT = performance.now();
+    const workgroupX = Math.ceil((this.listLen * 0.5) / this.invocNum);
     console.log('workgroupX', workgroupX);
 
     // calc dispatch
     let lastStepLen = 0;
     let ex = 0;
-    const maxParallelLen = invoc_num * 2;
+    const maxParallelLen = this.invocNum * 2;
     for (let len = 2; len <= this.listLen; len *= 2, ex++) {
       const currStepLen = lastStepLen + 1 + ex;
       lastStepLen = currStepLen;
@@ -129,28 +182,53 @@ export class DemoBitonicSorter implements Demo {
       }
     }
 
-    // const commandEncoder = device.createCommandEncoder();
-    // commandEncoder.copyBufferToBuffer(
-    //   this.buffers.listBuffer,
-    //   0,
-    //   this.buffers.listStagingBuffer,
-    //   0,
-    //   this.buffers.listBuffer.size,
-    // );
-    // queue.submit([commandEncoder.finish()]);
+    const commandEncoder = device.createCommandEncoder();
+    commandEncoder.copyBufferToBuffer(
+      this.buffers.listBuffer,
+      0,
+      this.buffers.listStagingBuffer,
+      0,
+      this.buffers.listBuffer.size,
+    );
+    queue.submit([commandEncoder.finish()]);
 
-    // await this.readList();
+    const sorted = await this.readList();
+    const endT = performance.now();
+    console.log('output', sorted);
+    console.log(
+      'BMS Compute',
+      performance
+        .measure('BMS Compute', {
+          start: startT,
+          end: endT,
+        })
+        .duration.toFixed(2) + 'ms',
+    );
+
+    this.listData.sort((a, b) => a - b);
+    console.log(
+      'JS Sort',
+      performance
+        .measure('JS Sort', {
+          start: endT,
+          end: performance.now(),
+        })
+        .duration.toFixed(2) + 'ms',
+    );
   }
-  async readList() {
+  async readList(log = false) {
     await this.buffers.listStagingBuffer.mapAsync(GPUMapMode.READ);
     const output = new Float32Array(this.buffers.listStagingBuffer.getMappedRange()).slice();
-    console.log(output);
+    this.debug && log && console.log(output);
     this.buffers.listStagingBuffer.unmap();
     return output;
   }
   resize(): void {}
-  dispose(): void {
-    // TODO
+  async dispose() {
+    await this.lastCompute;
+    this.buffers.listBuffer.destroy();
+    this.buffers.listStagingBuffer.destroy();
+    this.buffers.uniformBuffer.destroy();
   }
 }
 

@@ -67,23 +67,24 @@ demos.forEach(demo => {
 type Vec2 = [number, number];
 type Vec3 = [number, number, number];
 type Vec4 = [number, number, number, number];
+type Els = { can: HTMLElement; label: HTMLElement; content: HTMLElement };
 type Options =
-  | { value: string; onChange(v: string): void }
-  | { value: string; onChange(v: string): void; color: true }
-  | { value: string; onChange(v: string): void; options: string[] }
-  | { value: number; onChange(v: number): void; step?: number; range?: [number, number] }
-  | { value: Vec2; onChange(v: Vec2): void; step?: number; range?: [number, number] }
-  | { value: Vec3; onChange(v: Vec3): void; step?: number; range?: [number, number] }
-  | { value: Vec4; onChange(v: Vec4): void; step?: number; range?: [number, number] };
+  | { value: string; onChange(v: string, els: Els, opt: Options, optName: string): void }
+  | { value: string; onChange(v: string, els: Els, opt: Options, optName: string): void; color: true }
+  | { value: string; onChange(v: string, els: Els, opt: Options, optName: string): void; options: string[] }
+  | { value: number; onChange(v: number, els: Els, opt: Options, optName: string): void; step?: number; range?: [number, number] }
+  | { value: Vec2; onChange(v: Vec2, els: Els, opt: Options, optName: string): void; step?: number; range?: [number, number] }
+  | { value: Vec3; onChange(v: Vec3, els: Els, opt: Options, optName: string): void; step?: number; range?: [number, number] }
+  | { value: Vec4; onChange(v: Vec4, els: Els, opt: Options, optName: string): void; step?: number; range?: [number, number] };
 function genOptions(opts: Record<string, Options>) {
   Object.entries(opts).forEach(([optName, opt]) => {
     const can = document.createElement('div');
-    const labal = document.createElement('div');
+    const label = document.createElement('div');
     const content = document.createElement('div');
 
-    labal.innerText = optName;
+    label.innerText = optName;
     can.classList.add('opt-can');
-    labal.classList.add('opt-labal');
+    label.classList.add('opt-label');
     content.classList.add('opt-content');
 
     const isValueStr = typeof opt.value === 'string';
@@ -92,11 +93,13 @@ function genOptions(opts: Record<string, Options>) {
     const isValueColor = isValueStr && opt.color;
     const isValueSelect = isValueStr && opt.options;
 
+    const els = { can, label, content };
+
     if (isValueColor) {
       const input = document.createElement('input');
       input.type = 'color';
       input.value = opt.value as string;
-      input.onchange = () => opt.onChange(input.value);
+      input.onchange = () => opt.onChange(input.value, els, opt, optName);
       content.append(input);
     } else if (isValueSelect) {
       const select = document.createElement('select');
@@ -110,13 +113,24 @@ function genOptions(opts: Record<string, Options>) {
     } else if (isValueStr) {
       const input = document.createElement('input');
       input.value = opt.value as string;
-      input.onchange = () => opt.onChange(input.value);
+      input.onchange = () => opt.onChange(input.value, els, opt, optName);
       content.append(input);
     } else if (isValueNum) {
       const input = document.createElement('input');
       input.type = 'number';
       input.value = opt.value as string;
-      input.onchange = () => opt.onChange(input.value);
+      input.step = opt.step;
+      input.onchange = () => {
+        const v = Number(input.value);
+        if (opt.range) {
+          const [min, max] = opt.range;
+          if (v < min || v > max) {
+            input.value = String(Math.min(Math.max(v, min), max));
+            return;
+          }
+        }
+        opt.onChange(v, els, opt, optName);
+      };
       content.append(input);
     } else if (isValueVec) {
       const arr = opt.value as number[];
@@ -128,13 +142,13 @@ function genOptions(opts: Record<string, Options>) {
         input.value = String(arr[i]);
         input.onchange = () => {
           valueMutation[i] = Number(input.value);
-          opt.onChange(valueMutation);
+          opt.onChange(valueMutation, els, opt, optName);
         };
         content.append(input);
       }
     }
 
-    can.append(labal, content);
+    can.append(label, content);
     refs.listOption.append(can);
   });
 }
@@ -173,4 +187,4 @@ initContext(refs)
   });
 
 export { refs, genOptions };
-export type { Refs, GenOptions };
+export type { Refs, GenOptions, Els, Options };
