@@ -26,6 +26,7 @@ export class DemoBitonicSorter implements Demo {
   invocNum = 4;
   opts!: { invocation: number; dataSize: number };
   listData!: number[];
+  csm!: GPUShaderModule;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     // layout
@@ -45,6 +46,8 @@ export class DemoBitonicSorter implements Demo {
     });
     new Uint32Array(uniformBuffer.getMappedRange()).set(uniformBufferData);
     uniformBuffer.unmap();
+
+    this.csm = device.createShaderModule({ code: BMSComputeShader });
 
     this.bindGroupLayout = bindGroupLayout;
     this.uniformBuffer = uniformBuffer;
@@ -90,10 +93,12 @@ export class DemoBitonicSorter implements Demo {
     if (dataSize <= 32) drawBMSDiagram(dataSize, invocNum);
     else if (this.debug) console.log('BMS will not draw when data size exceed 32');
 
+    calcDispatch(dataSize, invocNum);
+
     const pipeline = device.createComputePipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
       compute: {
-        module: device.createShaderModule({ code: BMSComputeShader }),
+        module: this.csm,
         entryPoint: 'main',
         constants: { invoc_num: invocNum, invoc_h: invocNum * 2 },
       },
@@ -192,6 +197,17 @@ export class DemoBitonicSorter implements Demo {
     );
     queue.submit([commandEncoder.finish()]);
 
+    const submitT = performance.now();
+    console.log(
+      'BMS Submit',
+      performance
+        .measure('BMS Submit', {
+          start: startT,
+          end: submitT,
+        })
+        .duration.toFixed(2) + 'ms',
+    );
+
     const sorted = await this.readList();
     const endT = performance.now();
     console.log('output', sorted);
@@ -216,6 +232,7 @@ export class DemoBitonicSorter implements Demo {
         .duration.toFixed(2) + 'ms',
     );
   }
+
   async readList(log = false) {
     await this.buffers.listStagingBuffer.mapAsync(GPUMapMode.READ);
     const output = new Float32Array(this.buffers.listStagingBuffer.getMappedRange()).slice();
@@ -223,6 +240,7 @@ export class DemoBitonicSorter implements Demo {
     this.buffers.listStagingBuffer.unmap();
     return output;
   }
+
   resize(): void {}
   async dispose() {
     await this.lastCompute;
@@ -283,8 +301,11 @@ function drawBMSDiagram(arrLenPowerOfTwo: number, maxInvocationsPerWorkGroup: nu
     plotStr += '\n';
   }
   console.log(plotStr);
+}
 
-  // calc dispatch
+function calcDispatch(arrLenPowerOfTwo: number, maxInvocationsPerWorkGroup: number) {
+  const maxH = arrLenPowerOfTwo;
+
   let lastStepLen = 0;
   let ex = 0;
   const maxParallelLen = maxInvocationsPerWorkGroup * 2;

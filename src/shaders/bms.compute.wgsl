@@ -42,7 +42,7 @@ fn disp_once(h: u32, id: u32) -> vec2<u32> {
     let id_div = id / half_h;
     let id_mod = id % half_h;
     let l = id_div * h + id_mod;
-    let r = l + (h >> 1u); // l + h / 2
+    let r = l + half_h; // l + h / 2
     return vec2<u32>(l, r);
 }
 
@@ -107,7 +107,7 @@ fn main(@builtin(workgroup_id) wg_id_: vec3<u32>, @builtin(local_invocation_inde
 
     // 写回storage
     if (ubo.kernal & 1u) == 0u {
-        // workgroupBarrier();
+        workgroupBarrier();
         list[list_offset + l] = worklist[l];
         list[list_offset + r] = worklist[r];
     }
