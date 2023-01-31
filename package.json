@@ -12,5 +12,8 @@
     "@webgpu/types": "latest",
     "typescript": "^4.9.3",
     "vite": "^4.0.0"
+  },
+  "dependencies": {
+    "array-shuffle": "^3.0.0"
   }
 }

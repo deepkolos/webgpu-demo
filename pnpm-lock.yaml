@@ -2,11 +2,15 @@ lockfileVersion: 5.4
 
 specifiers:
   '@webgpu/types': latest
+  array-shuffle: ^3.0.0
   typescript: ^4.9.3
   vite: ^4.0.0
 
+dependencies:
+  array-shuffle: 3.0.0
+
 devDependencies:
-  '@webgpu/types': 0.1.24
+  '@webgpu/types': 0.1.26
   typescript: 4.9.4
   vite: 4.0.4
 
@@ -210,9 +214,14 @@ packages:
     dev: true
     optional: true
 
-  /@webgpu/types/0.1.24:
-    resolution: {integrity: sha512-Mkz+SVJwHApTg6nCzqIuHDt3HsGRcCvHJNkWT2PgZTTC2Gy+LXvN4+7x6YvduAcx3F/pEDWW5OfAHs6VSo6J4Q==}
+  /@webgpu/types/0.1.26:
+    resolution: {integrity: sha512-UgJdvWyWex2aG6u9Erx8cJCYiB0Voy4Vk0FfeUl8k7pHxUbCKbPNm0YKZNzxsOuZWn178hPbsMlpfvI8D6lA+w==}
     dev: true
+
+  /array-shuffle/3.0.0:
+    resolution: {integrity: sha512-rogEGxHOQPhslOhpg12LJkB+bbAl484/s2AJq0BxtzQDQfKl76fS2u9zWgg3p3b9ENcuvE7K8A7l5ddiPjCRnw==}
+    engines: {node: '>=12.20'}
+    dev: false
 
   /esbuild/0.16.16:
     resolution: {integrity: sha512-24JyKq10KXM5EBIgPotYIJ2fInNWVVqflv3gicIyQqfmUqi4HvDW1VR790cBgLJHCl96Syy7lhoz7tLFcmuRmg==}

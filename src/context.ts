@@ -13,7 +13,7 @@ export async function initContext(refs: Refs) {
   // 🔌 Physical Device Adapter
   adapter = (await entry.requestAdapter({ forceFallbackAdapter: false }))!;
 
-  adapter.requestAdapterInfo().then(console.log);
+  adapter.requestAdapterInfo?.().then(console.log);
   // 💻 Logical Device
   device = await adapter.requestDevice();
   queue = device.queue;

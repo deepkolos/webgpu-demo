@@ -2,6 +2,7 @@ import { adapter, device, queue } from '../context';
 import { GenOptions, Refs, Els, Options } from '../ui';
 import { Demo } from './demo';
 import BMSComputeShader from '../shaders/bms.compute.wgsl?raw';
+import arrayShuffle from 'array-shuffle';
 
 enum Kernel {
   local_bms = 0,
@@ -108,8 +109,9 @@ export class DemoBitonicSorter implements Demo {
       .fill(0)
       .map((v, k) => k)
       .sort((a, b) => b - a);
-    this.listData = listData;
-    const listBufferData = new Float32Array(listData);
+
+    this.listData = arrayShuffle(listData);
+    const listBufferData = new Float32Array(this.listData);
     const listBuffer = device.createBuffer({
       size: (listBufferData.byteLength + 3) & ~3,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
