@@ -7,3 +7,4 @@ WebGPU 学习 Demos
 - [TriangleRotating](./src/demos/triangleRotating.ts)
 - [RenderBundle](./src/demos/renderBundle.ts)
 - [Meshline](./src/demos/meshline.ts)
+- [BitonicSorter](./src/demos/bitonicSorter.ts)
