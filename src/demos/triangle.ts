@@ -80,11 +80,11 @@ export class DemoTriangle implements Demo {
         cullMode: 'back',
         frontFace: 'cw',
       },
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus-stencil8',
-      },
+      // depthStencil: {
+      //   depthWriteEnabled: true,
+      //   depthCompare: 'less',
+      //   format: 'depth24plus-stencil8',
+      // },
     });
 
     // 资源
@@ -175,15 +175,15 @@ export class DemoTriangle implements Demo {
           storeOp: 'store',
         },
       ],
-      depthStencilAttachment: {
-        view: this.depthStencilTextureView,
-        depthClearValue: 1,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-        stencilClearValue: 0,
-        stencilLoadOp: 'clear',
-        stencilStoreOp: 'store',
-      },
+      // depthStencilAttachment: {
+      //   view: this.depthStencilTextureView,
+      //   depthClearValue: 1,
+      //   depthLoadOp: 'clear',
+      //   depthStoreOp: 'store',
+      //   stencilClearValue: 0,
+      //   stencilLoadOp: 'clear',
+      //   stencilStoreOp: 'store',
+      // },
     });
     const w = canvasCtx.canvas.width;
     const h = canvasCtx.canvas.height;

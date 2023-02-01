@@ -1,8 +1,10 @@
-import { adapter, device, queue } from '../context';
+import arrayShuffle from 'array-shuffle';
+import { adapter, canvasCtx, device, queue } from '../context';
 import { GenOptions, Refs, Els, Options } from '../ui';
 import { Demo } from './demo';
 import BMSComputeShader from '../shaders/bms.compute.wgsl?raw';
-import arrayShuffle from 'array-shuffle';
+import BMSVertShader from '../shaders/bms.vert.wgsl?raw';
+import BMSFragShader from '../shaders/bms.frag.wgsl?raw';
 
 enum Kernel {
   local_bms = 0,
@@ -21,6 +23,8 @@ export class DemoBitonicSorter implements Demo {
   buffers!: { listBuffer: GPUBuffer; listStagingBuffer: GPUBuffer; uniformBuffer: GPUBuffer };
   listLen!: number;
   debug = false;
+  renderDispatch = true;
+  renderCleared = false;
   lastCompute!: Promise<void>;
   bindGroupLayout!: GPUBindGroupLayout;
   uniformBuffer!: GPUBuffer;
@@ -29,6 +33,12 @@ export class DemoBitonicSorter implements Demo {
   listData!: number[];
   csm!: GPUShaderModule;
   infoNode!: HTMLPreElement;
+  renderBindGroupLayout!: GPUBindGroupLayout;
+  renderPipeline!: GPURenderPipeline;
+  renderBindGroup!: GPUBindGroup;
+  positionUVBuffer!: GPUBuffer;
+  dispatchLen!: number;
+  renderUniformBuffer!: GPUBuffer;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     // layout
@@ -37,6 +47,40 @@ export class DemoBitonicSorter implements Demo {
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
+    });
+    const renderBindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+      ],
+    });
+
+    const renderPipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [renderBindGroupLayout] }),
+      vertex: {
+        module: device.createShaderModule({ code: BMSVertShader }),
+        entryPoint: 'main',
+        buffers: [
+          {
+            arrayStride: 4 * 4,
+            stepMode: 'vertex',
+            attributes: [
+              { offset: 0, format: 'float32x2', shaderLocation: 0 },
+              { offset: 4 * 2, format: 'float32x2', shaderLocation: 1 },
+            ],
+          },
+        ],
+      },
+      fragment: {
+        module: device.createShaderModule({ code: BMSFragShader }),
+        entryPoint: 'main',
+        targets: [{ format: 'bgra8unorm' }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+        cullMode: 'none',
+        frontFace: 'cw',
+      },
     });
 
     // ubo
@@ -49,12 +93,52 @@ export class DemoBitonicSorter implements Demo {
     new Uint32Array(uniformBuffer.getMappedRange()).set(uniformBufferData);
     uniformBuffer.unmap();
 
+    const renderUniformBufferData = new Uint32Array(3);
+    const renderUniformBuffer = device.createBuffer({
+      size: (renderUniformBufferData.byteLength + 3) & ~3,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Uint32Array(renderUniformBuffer.getMappedRange()).set(renderUniformBufferData);
+    renderUniformBuffer.unmap();
+
     this.csm = device.createShaderModule({ code: BMSComputeShader });
+
+    // prettier-ignore
+    const positionUVBufferData = new Float32Array([
+      // position uv
+      -1,  1,     0, 1, // top-left
+       1, -1,     1, 0, // bottom-right
+      -1, -1,     0, 0, // bottom-left
+      -1,  1,     0, 1, // top-left
+       1,  1,     1, 1, // top-right
+       1, -1,     1, 0, // bottom-right
+    ]);
+    const positionUVBuffer = device.createBuffer({
+      size: (positionUVBufferData.byteLength + 3) & ~3,
+      usage: GPUBufferUsage.VERTEX,
+      mappedAtCreation: true,
+    });
+    new Float32Array(positionUVBuffer.getMappedRange()).set(positionUVBufferData);
+    positionUVBuffer.unmap();
 
     this.bindGroupLayout = bindGroupLayout;
     this.uniformBuffer = uniformBuffer;
 
-    this.opts = { invocation: 8, dataSize: 22 };
+    this.renderBindGroupLayout = renderBindGroupLayout;
+    this.renderPipeline = renderPipeline;
+    this.positionUVBuffer = positionUVBuffer;
+    this.renderUniformBuffer = renderUniformBuffer;
+
+    const canvasConfig: GPUCanvasConfiguration = {
+      device,
+      format: 'bgra8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+      alphaMode: 'opaque',
+    };
+    canvasCtx.configure(canvasConfig);
+
+    this.opts = { invocation: 2, dataSize: 4 };
 
     this.initUI(refs, genOptions);
 
@@ -102,7 +186,7 @@ export class DemoBitonicSorter implements Demo {
     if (dataSize <= 32) drawBMSDiagram(dataSize, invocNum);
     else if (this.debug) console.log('BMS will not draw when data size exceed 32');
 
-    calcDispatch(dataSize, invocNum);
+    const dispatchLen = calcDispatch(dataSize, invocNum);
 
     const pipeline = device.createComputePipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
@@ -136,15 +220,29 @@ export class DemoBitonicSorter implements Demo {
         { binding: 1, resource: { buffer: this.uniformBuffer } },
       ],
     });
+    const renderBindGroup = device.createBindGroup({
+      layout: this.renderBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.renderUniformBuffer } },
+        { binding: 1, resource: { buffer: listBuffer } },
+      ],
+    });
 
     this.buffers = { listBuffer, listStagingBuffer, uniformBuffer: this.uniformBuffer };
     this.listLen = dataSize;
     this.bindGroup = bindGroup;
+    this.renderBindGroup = renderBindGroup;
     this.pipeline = pipeline;
     this.invocNum = invocNum;
+    this.dispatchLen = dispatchLen;
   }
 
-  async dispatch(workgourpGrid: [number, number, number], kernel: Kernel, workH: number) {
+  async dispatch(
+    workgourpGrid: [number, number, number],
+    kernel: Kernel,
+    workH: number,
+    dispatchId: number,
+  ) {
     this.debug && console.log(`BMS dispatch kernel: ${kernel} workH: ${workH}`);
     const ubo = new Uint32Array([kernel, workH]);
     queue.writeBuffer(this.buffers.uniformBuffer, 0, ubo.buffer, ubo.byteOffset, ubo.byteLength);
@@ -166,11 +264,47 @@ export class DemoBitonicSorter implements Demo {
     queue.submit([commandEncoder.finish()]);
 
     this.debug && (await this.readList(true));
+    this.renderOneDispatch(dispatchId);
+  }
+
+  renderOneDispatch(dispatchId: number) {
+    if (!this.renderDispatch) return;
+
+    console.log('BMS render dispatch', dispatchId);
+    const width = 1 / this.dispatchLen;
+    const offsetX = dispatchId * 2.0 * width;
+    const ubo = new Float32Array([width, offsetX, this.listLen]);
+    queue.writeBuffer(this.renderUniformBuffer, 0, ubo.buffer, ubo.byteOffset, ubo.byteLength);
+
+    const colorTexture = canvasCtx.getCurrentTexture();
+    const colorView = colorTexture.createView();
+    const commandEncoder = device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: colorView,
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: !this.renderCleared ? 'clear' : 'load',
+          storeOp: 'store',
+        },
+      ],
+    });
+    const w = canvasCtx.canvas.width;
+    const h = canvasCtx.canvas.height;
+    passEncoder.setPipeline(this.renderPipeline);
+    passEncoder.setBindGroup(0, this.renderBindGroup);
+    passEncoder.setVertexBuffer(0, this.positionUVBuffer);
+    passEncoder.setViewport(0, 0, w, h, 0, 1);
+    passEncoder.setScissorRect(0, 0, w, h);
+    passEncoder.draw(6);
+    passEncoder.end();
+    queue.submit([commandEncoder.finish()]);
+
+    this.renderCleared = true;
   }
 
   async compute() {
     const startT = performance.now();
-    // TODO make use of all dimension
     const workgroupLimit = adapter.limits.maxComputeWorkgroupsPerDimension;
     const workgroupNum = (this.listLen * 0.5) / this.invocNum;
     const workgourpGrid: [number, number, number] = [1, 1, 1];
@@ -189,23 +323,34 @@ export class DemoBitonicSorter implements Demo {
 
     console.log('workgourpGrid', workgourpGrid);
 
+    // draw inter step data
+    if (this.renderDispatch) {
+      this.renderCleared = false;
+    }
+
     // calc dispatch
     let lastStepLen = 0;
     let ex = 0;
+    let dispatchId = 0;
     const maxParallelLen = this.invocNum * 2;
     for (let len = 2; len <= this.listLen; len *= 2, ex++) {
       const currStepLen = lastStepLen + 1 + ex;
       lastStepLen = currStepLen;
       if (len < maxParallelLen) continue;
       else if (len === maxParallelLen) {
-        await this.dispatch(workgourpGrid, Kernel.local_bms, len);
+        await this.dispatch(workgourpGrid, Kernel.local_bms, len, dispatchId);
+        dispatchId++;
       } else {
-        await this.dispatch(workgourpGrid, Kernel.storage_flip_once, len);
+        await this.dispatch(workgourpGrid, Kernel.storage_flip_once, len, dispatchId);
+        dispatchId++;
+
         let downH = len * 0.5;
         for (; downH > maxParallelLen; downH *= 0.5) {
-          await this.dispatch(workgourpGrid, Kernel.storage_disp_once, downH);
+          await this.dispatch(workgourpGrid, Kernel.storage_disp_once, downH, dispatchId);
+          dispatchId++;
         }
-        await this.dispatch(workgourpGrid, Kernel.local_disp, downH);
+        await this.dispatch(workgourpGrid, Kernel.local_disp, downH, dispatchId);
+        dispatchId++;
       }
     }
 
@@ -328,6 +473,7 @@ function calcDispatch(arrLenPowerOfTwo: number, maxInvocationsPerWorkGroup: numb
 
   let lastStepLen = 0;
   let ex = 0;
+  let dispatchLen = 0;
   const maxParallelLen = maxInvocationsPerWorkGroup * 2;
   for (let len = 2; len <= maxH; len *= 2, ex++) {
     const currStepLen = lastStepLen + 1 + ex;
@@ -335,13 +481,32 @@ function calcDispatch(arrLenPowerOfTwo: number, maxInvocationsPerWorkGroup: numb
     if (len < maxParallelLen) continue;
     else if (len === maxParallelLen) {
       console.log(`BMS local_bms\t l: ${len}\t ex: ${ex}`);
+      dispatchLen++;
     } else {
       console.log(`BMS big_flip\t l: ${len}\t ex: ${ex}`);
+      dispatchLen++;
       let downH = len * 0.5;
       for (; downH > maxParallelLen; downH *= 0.5) {
         console.log(`BMS big_disp\t l: ${downH}\t ex: ${ex}`);
+        dispatchLen++;
       }
       console.log(`BMS local_disp\t l: ${downH}\t ex: ${ex}`);
+      dispatchLen++;
     }
   }
+
+  return dispatchLen;
+}
+
+function calcStepLen(maxH: number) {
+  let stepIndex = -1;
+
+  for (let upH = 2; upH <= maxH; upH *= 2) {
+    stepIndex++;
+
+    for (let downH = upH * 0.5; downH >= 2; downH *= 0.5) {
+      stepIndex++;
+    }
+  }
+  return stepIndex + 1;
 }
