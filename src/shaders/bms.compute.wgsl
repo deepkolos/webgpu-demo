@@ -82,10 +82,11 @@ fn storage_compare_swap(v: vec2<u32>) {
 }
 
 @compute @workgroup_size(invoc_num)
-fn main(@builtin(workgroup_id) wg_id_: vec3<u32>, @builtin(local_invocation_index) invoc_id_: u32, @builtin(global_invocation_id) global_invoc_id_: vec3<u32>) {
-    wg_id = wg_id_.x;
+fn main(@builtin(workgroup_id) wg_id_: vec3<u32>, @builtin(local_invocation_index) invoc_id_: u32, @builtin(global_invocation_id) global_invoc_id_: vec3<u32>, @builtin(num_workgroups) num_workgroups_: vec3<u32>) {
     invoc_id = invoc_id_;
-    global_invoc_id = global_invoc_id_.x;
+    wg_id = wg_id_.x + wg_id_.y * num_workgroups_.x + wg_id_.z * num_workgroups_.x * num_workgroups_.y;
+    // global_invoc_id = global_invoc_id_.x + global_invoc_id_.y * num_workgroups_.x + global_invoc_id_.z * num_workgroups_.x * num_workgroups_.y;
+    global_invoc_id = wg_id * invoc_num + invoc_id_;
 
     // 按照flip h: 2 的step的数据写入worklist, 顺序无关
     let l = invoc_id << 1u;

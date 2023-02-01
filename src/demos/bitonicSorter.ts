@@ -54,7 +54,7 @@ export class DemoBitonicSorter implements Demo {
     this.bindGroupLayout = bindGroupLayout;
     this.uniformBuffer = uniformBuffer;
 
-    this.opts = { invocation: 8, dataSize: 20 };
+    this.opts = { invocation: 8, dataSize: 22 };
 
     this.initUI(refs, genOptions);
 
@@ -76,7 +76,7 @@ export class DemoBitonicSorter implements Demo {
       },
       dataSize: {
         value: this.opts.dataSize,
-        range: [1, 24],
+        range: [1, 25], // 26 storage size就超过单个storage size限制, 需要拆分多个
         onChange: async (v: number, els: Els, opt: Options, optName: string) => {
           this.opts.dataSize = v;
           els.label.innerText = `${optName}(${Math.pow(2, v)})`;
@@ -95,7 +95,6 @@ export class DemoBitonicSorter implements Demo {
     await this.lastCompute;
     this.buffers?.listBuffer.destroy();
     this.buffers?.listStagingBuffer.destroy();
-    // this.buffers?.uniformBuffer.destroy();
 
     const invocNum = Math.pow(2, this.opts.invocation);
     const dataSize = Math.pow(2, this.opts.dataSize);
@@ -114,11 +113,7 @@ export class DemoBitonicSorter implements Demo {
       },
     });
 
-    const listData = new Array(dataSize)
-      .fill(0)
-      .map((v, k) => k)
-      .sort((a, b) => b - a);
-
+    const listData = new Array(dataSize).fill(0).map((v, k) => k);
     this.listData = arrayShuffle(listData);
     const listBufferData = new Float32Array(this.listData);
     const listBuffer = device.createBuffer({
@@ -149,7 +144,7 @@ export class DemoBitonicSorter implements Demo {
     this.invocNum = invocNum;
   }
 
-  async dispatch(workgroupX: number, kernel: Kernel, workH: number) {
+  async dispatch(workgourpGrid: [number, number, number], kernel: Kernel, workH: number) {
     this.debug && console.log(`BMS dispatch kernel: ${kernel} workH: ${workH}`);
     const ubo = new Uint32Array([kernel, workH]);
     queue.writeBuffer(this.buffers.uniformBuffer, 0, ubo.buffer, ubo.byteOffset, ubo.byteLength);
@@ -157,7 +152,7 @@ export class DemoBitonicSorter implements Demo {
     const passEncoder = commandEncoder.beginComputePass({});
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, this.bindGroup);
-    passEncoder.dispatchWorkgroups(workgroupX);
+    passEncoder.dispatchWorkgroups(workgourpGrid[0], workgourpGrid[1], workgourpGrid[2]);
     passEncoder.end();
     this.debug &&
       commandEncoder.copyBufferToBuffer(
@@ -175,8 +170,24 @@ export class DemoBitonicSorter implements Demo {
 
   async compute() {
     const startT = performance.now();
-    const workgroupX = Math.ceil((this.listLen * 0.5) / this.invocNum);
-    console.log('workgroupX', workgroupX);
+    // TODO make use of all dimension
+    const workgroupLimit = adapter.limits.maxComputeWorkgroupsPerDimension;
+    const workgroupNum = (this.listLen * 0.5) / this.invocNum;
+    const workgourpGrid: [number, number, number] = [1, 1, 1];
+    if (workgroupNum <= workgroupLimit) {
+      workgourpGrid[0] = Math.ceil(workgroupNum);
+    } else if (workgroupNum <= Math.pow(workgroupLimit, 2)) {
+      workgourpGrid[0] = Math.ceil(Math.sqrt(workgroupNum));
+      workgourpGrid[1] = workgourpGrid[0];
+    } else if (workgroupNum <= Math.pow(workgroupLimit, 3)) {
+      workgourpGrid[0] = Math.ceil(Math.cbrt(workgroupNum));
+      workgourpGrid[1] = workgourpGrid[0];
+      workgourpGrid[2] = workgourpGrid[0];
+    } else {
+      // 长度超出可以计算的范围
+    }
+
+    console.log('workgourpGrid', workgourpGrid);
 
     // calc dispatch
     let lastStepLen = 0;
@@ -187,14 +198,14 @@ export class DemoBitonicSorter implements Demo {
       lastStepLen = currStepLen;
       if (len < maxParallelLen) continue;
       else if (len === maxParallelLen) {
-        await this.dispatch(workgroupX, Kernel.local_bms, len);
+        await this.dispatch(workgourpGrid, Kernel.local_bms, len);
       } else {
-        await this.dispatch(workgroupX, Kernel.storage_flip_once, len);
+        await this.dispatch(workgourpGrid, Kernel.storage_flip_once, len);
         let downH = len * 0.5;
         for (; downH > maxParallelLen; downH *= 0.5) {
-          await this.dispatch(workgroupX, Kernel.storage_disp_once, downH);
+          await this.dispatch(workgourpGrid, Kernel.storage_disp_once, downH);
         }
-        await this.dispatch(workgroupX, Kernel.local_disp, downH);
+        await this.dispatch(workgourpGrid, Kernel.local_disp, downH);
       }
     }
 
@@ -228,12 +239,17 @@ export class DemoBitonicSorter implements Demo {
       'ms';
     console.log(BMSCost);
 
-    this.listData.sort((a, b) => a - b);
-    const JSSortCost =
-      'JS Sort ' +
-      performance.measure('JS Sort', { start: endT, end: performance.now() }).duration.toFixed(2) +
-      'ms';
-    console.log(JSSortCost);
+    let JSSortCost = '';
+    if (this.listLen <= Math.pow(2, 23)) {
+      this.listData.sort((a, b) => a - b);
+      JSSortCost =
+        'JS Sort ' +
+        performance
+          .measure('JS Sort', { start: endT, end: performance.now() })
+          .duration.toFixed(2) +
+        'ms';
+      console.log(JSSortCost);
+    }
     this.infoNode.innerText = `${BMSCost}\n${JSSortCost}`;
   }
 
