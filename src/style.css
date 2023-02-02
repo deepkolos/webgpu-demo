@@ -86,6 +86,11 @@ a {
   color: white;
 }
 
+.opt-label {
+  display: flex;
+  align-items: center;
+}
+
 /* PC */
 @media screen and (min-width: 800px) {
   .plane.left {

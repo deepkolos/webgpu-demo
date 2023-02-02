@@ -1,4 +1,5 @@
 import arrayShuffle from 'array-shuffle';
+import { debounce } from 'lodash-es';
 import { adapter, canvasCtx, device, queue } from '../context';
 import { GenOptions, Refs, Els, Options } from '../ui';
 import { Demo } from './demo';
@@ -39,6 +40,7 @@ export class DemoBitonicSorter implements Demo {
   positionUVBuffer!: GPUBuffer;
   dispatchLen!: number;
   renderUniformBuffer!: GPUBuffer;
+  inited = false;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     // layout
@@ -141,9 +143,7 @@ export class DemoBitonicSorter implements Demo {
     this.opts = { invocation: 2, dataSize: 4 };
 
     this.initUI(refs, genOptions);
-
-    await this.prepare();
-    this.lastCompute = this.compute();
+    this.inited = true;
   }
 
   initUI(refs: Refs, genOptions: GenOptions) {
@@ -165,6 +165,14 @@ export class DemoBitonicSorter implements Demo {
           this.opts.dataSize = v;
           els.label.innerText = `${optName}(${Math.pow(2, v)})`;
           await this.prepare();
+          this.lastCompute = this.compute();
+        },
+      },
+      renderDispatch: {
+        value: this.renderDispatch,
+        onChange: async (v: boolean) => {
+          this.renderDispatch = v;
+          await this.lastCompute;
           this.lastCompute = this.compute();
         },
       },
@@ -270,7 +278,6 @@ export class DemoBitonicSorter implements Demo {
   renderOneDispatch(dispatchId: number) {
     if (!this.renderDispatch) return;
 
-    console.log('BMS render dispatch', dispatchId);
     const width = 1 / this.dispatchLen;
     const offsetX = dispatchId * 2.0 * width;
     const ubo = new Float32Array([width, offsetX, this.listLen]);
@@ -379,7 +386,7 @@ export class DemoBitonicSorter implements Demo {
     const endT = performance.now();
     console.log('output', sorted);
     const BMSCost =
-      'BMS GPU ' +
+      `BMS GPU ${this.renderDispatch ? '+ Render ' : ''}` +
       performance.measure('BMS Compute', { start: startT, end: endT }).duration.toFixed(2) +
       'ms';
     console.log(BMSCost);
@@ -406,8 +413,15 @@ export class DemoBitonicSorter implements Demo {
     return output;
   }
 
-  resize(): void {}
+  resize = debounce(async () => {
+    if (this.inited) {
+      await this.prepare();
+      this.lastCompute = this.compute();
+    }
+  }, 200);
+
   async dispose() {
+    this.inited = false;
     await this.lastCompute;
     this.buffers.listBuffer.destroy();
     this.buffers.listStagingBuffer.destroy();

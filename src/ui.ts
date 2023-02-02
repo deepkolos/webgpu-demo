@@ -68,7 +68,9 @@ type Vec2 = [number, number];
 type Vec3 = [number, number, number];
 type Vec4 = [number, number, number, number];
 type Els = { can: HTMLElement; label: HTMLElement; content: HTMLElement };
+// prettier-ignore
 type Options =
+  | { value: boolean; onChange(v: boolean, els: Els, opt: Options, optName: string): void}
   | { value: string; onChange(v: string, els: Els, opt: Options, optName: string): void }
   | { value: string; onChange(v: string, els: Els, opt: Options, optName: string): void; color: true }
   | { value: string; onChange(v: string, els: Els, opt: Options, optName: string): void; options: string[] }
@@ -87,6 +89,7 @@ function genOptions(opts: Record<string, Options>) {
     label.classList.add('opt-label');
     content.classList.add('opt-content');
 
+    const isValueBool = typeof opt.value === 'boolean';
     const isValueStr = typeof opt.value === 'string';
     const isValueNum = typeof opt.value === 'number';
     const isValueVec = Array.isArray(opt.value);
@@ -146,6 +149,12 @@ function genOptions(opts: Record<string, Options>) {
         };
         content.append(input);
       }
+    } else if (isValueBool) {
+      const input = document.createElement('input');
+      input.checked = opt.value;
+      input.type = 'checkbox';
+      input.onchange = () => opt.onChange(input.checked, els, opt, optName);
+      label.append(input);
     }
 
     can.append(label, content);
