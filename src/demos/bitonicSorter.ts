@@ -172,7 +172,7 @@ export class DemoBitonicSorter implements Demo {
         value: this.renderDispatch,
         onChange: async (v: boolean) => {
           this.renderDispatch = v;
-          await this.lastCompute;
+          await this.prepare();
           this.lastCompute = this.compute();
         },
       },
