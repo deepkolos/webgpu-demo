@@ -185,15 +185,15 @@ export class DemoTriangle implements Demo {
       //   stencilStoreOp: 'store',
       // },
     });
-    const w = canvasCtx.canvas.width;
-    const h = canvasCtx.canvas.height;
+    // const w = canvasCtx.canvas.width;
+    // const h = canvasCtx.canvas.height;
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.setVertexBuffer(0, this.buffers.positionBuffer);
     passEncoder.setVertexBuffer(1, this.buffers.colorBuffer);
     passEncoder.setIndexBuffer(this.buffers.indexBuffer, 'uint16');
-    passEncoder.setViewport(0, 0, w, h, 0, 1);
-    passEncoder.setScissorRect(0, 0, w, h);
+    // passEncoder.setViewport(0, 0, w, h, 0, 1);
+    // passEncoder.setScissorRect(0, 0, w, h);
     passEncoder.drawIndexed(3, 1);
 
     passEncoder.end();

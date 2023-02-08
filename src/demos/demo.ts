@@ -1,3 +1,4 @@
+import { device } from '../context';
 import type { Refs, GenOptions } from '../ui';
 
 export interface Demo {
@@ -26,3 +27,29 @@ export async function loadImageBitmap(src: string): Promise<ImageBitmap> {
   await img.decode();
   return createImageBitmap(img, { imageOrientation: 'flipY' });
 }
+
+export const align = (len: number, alignment: number = 4) => {
+  return (len + (alignment - 1)) & ~(alignment - 1);
+};
+
+export function createBuffer(
+  data: Float32Array | Uint32Array,
+  usage: GPUFlagsConstant,
+  mappedAtCreation = false,
+  alignment = 16,
+) {
+  const buffer = device.createBuffer({
+    usage,
+    size: align(data.byteLength, alignment),
+    mappedAtCreation,
+  });
+  if (mappedAtCreation) {
+    // @ts-ignore
+    new data.constructor(buffer.getMappedRange()).set(data);
+    buffer.unmap();
+  }
+  return buffer;
+}
+
+export const degToRad = (deg: number) => (Math.PI * deg) / 180;
+export const radToDeg = (rad: number) => (rad * 180) / Math.PI;

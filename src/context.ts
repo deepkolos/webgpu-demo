@@ -4,6 +4,7 @@ export let adapter: GPUAdapter;
 export let device: GPUDevice;
 export let queue: GPUQueue;
 export let canvasCtx: GPUCanvasContext;
+export let canvasFormat: GPUTextureFormat;
 
 export async function initContext(refs: Refs) {
   // 🏭 Entry to WebGPU
@@ -18,5 +19,7 @@ export async function initContext(refs: Refs) {
   device = await adapter.requestDevice();
   queue = device.queue;
   canvasCtx = refs.gfx.getContext('webgpu')!;
+  canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
   if (!canvasCtx) throw new Error('get webgpu context fail');
 }

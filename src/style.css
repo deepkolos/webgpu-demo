@@ -91,6 +91,10 @@ a {
   align-items: center;
 }
 
+.opt-vec-input {
+  width: 40px;
+}
+
 /* PC */
 @media screen and (min-width: 800px) {
   .plane.left {

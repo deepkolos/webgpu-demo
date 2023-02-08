@@ -8,3 +8,4 @@ WebGPU 学习 Demos
 - [RenderBundle](./src/demos/renderBundle.ts)
 - [Meshline](./src/demos/meshline.ts)
 - [BitonicSorter](./src/demos/bitonicSorter.ts)
+- [ClusterForward[WIP]](./src/demos/clusterForward.ts)

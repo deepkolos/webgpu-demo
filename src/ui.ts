@@ -7,6 +7,8 @@ import { DemoRenderBundle } from './demos/renderBundle';
 import { DemoTriangleRotating } from './demos/triangleRotating';
 import { DemoMeshline } from './demos/meshline';
 import { DemoBitonicSorter } from './demos/bitonicSorter';
+import { DemoClusterForward } from './demos/clusterForward';
+import { slice } from 'lodash-es';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -30,6 +32,7 @@ const demos: Array<Demo> = [
   new DemoTriangleRotating(),
   new DemoMeshline(),
   new DemoBitonicSorter(),
+  new DemoClusterForward(),
 ];
 
 // init demo list
@@ -50,8 +53,8 @@ demos.forEach(demo => {
     currDemo?.dispose();
     currLink?.classList.remove('active');
     refs.listOption.innerHTML = '';
-    demo.resize();
     demo.init(refs, genOptions);
+    demo.resize();
     currDemo = demo;
     currLink = link;
     document.title = `${demo.name} WebGPU Demo`;
@@ -64,9 +67,6 @@ demos.forEach(demo => {
 });
 
 // init options
-type Vec2 = [number, number];
-type Vec3 = [number, number, number];
-type Vec4 = [number, number, number, number];
 type Els = { can: HTMLElement; label: HTMLElement; content: HTMLElement };
 // prettier-ignore
 type Options =
@@ -93,8 +93,8 @@ function genOptions(opts: Record<string, Options>) {
     const isValueStr = typeof opt.value === 'string';
     const isValueNum = typeof opt.value === 'number';
     const isValueVec = Array.isArray(opt.value);
-    const isValueColor = isValueStr && opt.color;
-    const isValueSelect = isValueStr && opt.options;
+    const isValueColor = isValueStr && (opt as any).color;
+    const isValueSelect = isValueStr && (opt as any).options;
 
     const els = { can, label, content };
 
@@ -102,27 +102,37 @@ function genOptions(opts: Record<string, Options>) {
       const input = document.createElement('input');
       input.type = 'color';
       input.value = opt.value as string;
-      input.onchange = () => opt.onChange(input.value, els, opt, optName);
+      input.onchange = () => {
+        opt.value = input.value;
+        opt.onChange(input.value, els, opt, optName);
+      };
       content.append(input);
     } else if (isValueSelect) {
       const select = document.createElement('select');
-      (opt.options as string[]).forEach(i => {
+      ((opt as any).options as string[]).forEach(i => {
         const option = document.createElement('option');
         option.value = i;
         option.innerText = i;
         select.append(option);
       });
+      select.onchange = () => {
+        opt.value = select.value;
+        opt.onChange(select.value, els, opt, optName);
+      };
       content.append(select);
     } else if (isValueStr) {
       const input = document.createElement('input');
       input.value = opt.value as string;
-      input.onchange = () => opt.onChange(input.value, els, opt, optName);
-      content.append(input);
+      input.onchange = () => {
+        opt.value = input.value;
+        opt.onChange(input.value, els, opt, optName);
+      };
+      label.append(input);
     } else if (isValueNum) {
       const input = document.createElement('input');
       input.type = 'number';
-      input.value = opt.value as string;
-      input.step = opt.step;
+      input.value = opt.value as unknown as string;
+      input.step = opt.step as unknown as string;
       input.onchange = () => {
         const v = Number(input.value);
         if (opt.range) {
@@ -132,20 +142,23 @@ function genOptions(opts: Record<string, Options>) {
             return;
           }
         }
+        opt.value = v;
         opt.onChange(v, els, opt, optName);
       };
       content.append(input);
     } else if (isValueVec) {
       const arr = opt.value as number[];
       const len = arr.length;
-      const valueMutation = [...arr];
+      const valueMutation: Vec2 | Vec3 | Vec4 = [...arr] as any;
       for (let i = 0; i < len; i++) {
         const input = document.createElement('input');
+        input.classList.add('opt-vec-input')
         input.type = 'number';
         input.value = String(arr[i]);
         input.onchange = () => {
           valueMutation[i] = Number(input.value);
-          opt.onChange(valueMutation, els, opt, optName);
+          opt.value = valueMutation;
+          opt.onChange(valueMutation as any, els, opt, optName);
         };
         content.append(input);
       }
@@ -153,12 +166,16 @@ function genOptions(opts: Record<string, Options>) {
       const input = document.createElement('input');
       input.checked = opt.value;
       input.type = 'checkbox';
-      input.onchange = () => opt.onChange(input.checked, els, opt, optName);
+      input.onchange = () => {
+        opt.value = input.checked;
+        opt.onChange(input.checked, els, opt, optName);
+      };
       label.append(input);
     }
 
     can.append(label, content);
     refs.listOption.append(can);
+    return opts;
   });
 }
 type GenOptions = typeof genOptions;
