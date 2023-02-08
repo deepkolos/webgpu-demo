@@ -155,8 +155,17 @@ function genOptions(opts: Record<string, Options>) {
         input.classList.add('opt-vec-input')
         input.type = 'number';
         input.value = String(arr[i]);
+        input.step = (opt as any).step as unknown as string;
         input.onchange = () => {
-          valueMutation[i] = Number(input.value);
+          const v = Number(input.value);
+          if (opt.range) {
+            const [min, max] = opt.range;
+            if (v < min || v > max) {
+              input.value = String(Math.min(Math.max(v, min), max));
+              return;
+            }
+          }
+          valueMutation[i] = v;
           opt.value = valueMutation;
           opt.onChange(valueMutation as any, els, opt, optName);
         };

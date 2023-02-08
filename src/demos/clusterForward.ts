@@ -7,12 +7,20 @@ import { mat4 } from 'gl-matrix';
 import { cubePrimitives } from '../assets/boxPrimitivs';
 
 const vfov = degToRad(45);
+const DEPTH_FORMAT = 'depth24plus';
+const DepthSplitMethod: { [k: string]: number } = {
+  'ndc-even': 0,
+  'view-space-even': 1,
+  'DOOM-2016-Siggraph': 2,
+};
 
 type Params = {
   output: { value: string; options: string[]; onChange: (v: string) => void };
   clusterSize: { value: Vec3; range: Vec2; onChange: (v: Vec3) => void };
   lightNum: { value: number; range: Vec2; onChange: (v: number) => void };
   zRange: { value: Vec2; range: Vec2; onChange: (v: Vec2) => void };
+  animateCamera: { value: boolean; onChange: (v: boolean) => void };
+  frustumDepth: { value: string; options: string[]; onChange: (v: string) => void };
 };
 
 export class DemoClusterForward implements Demo {
@@ -26,20 +34,27 @@ export class DemoClusterForward implements Demo {
   params!: Params;
   frustumHelper!: FrustumHelper;
   viewportSpliter = new ViewportSpliter();
+  depthTexture!: GPUTexture;
+  depthTextureView!: GPUTextureView;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     this.disposed = false;
     this.initUI(refs, genOptions);
 
     this.frustumHelper =
-      this.frustumHelper || new FrustumHelper({ colorFormats: [canvasFormat] }, this.params);
+      this.frustumHelper ||
+      new FrustumHelper(
+        { colorFormats: [canvasFormat], depthStencilFormat: DEPTH_FORMAT },
+        this.params,
+      );
 
     canvasCtx.configure({
       device,
       format: canvasFormat,
       alphaMode: 'opaque',
     });
-    this.render();
+
+    requestAnimationFrame(this.render);
   }
 
   initUI(refs: Refs, genOptions: GenOptions) {
@@ -50,9 +65,11 @@ export class DemoClusterForward implements Demo {
         onChange: (v: string) => {},
       },
       clusterSize: {
-        value: [32, 18, 32],
+        value: [3, 3, 3],
         range: [1, 32],
-        onChange: (v: [number, number, number]) => {},
+        onChange: (v: [number, number, number]) => {
+          this.frustumHelper.setClusterSize(v);
+        },
       },
       lightNum: {
         value: 1,
@@ -63,6 +80,15 @@ export class DemoClusterForward implements Demo {
         value: [1, 10],
         range: [0.01, 10000],
         onChange: (v: Vec2) => {},
+      },
+      frustumDepth: {
+        value: 'ndc-even',
+        options: ['ndc-even', 'view-space-even', 'DOOM-2016-Siggraph'],
+        onChange: (v: string) => {},
+      },
+      animateCamera: {
+        value: true,
+        onChange: (v: boolean) => {},
       },
     };
     genOptions(this.params);
@@ -93,6 +119,12 @@ export class DemoClusterForward implements Demo {
           storeOp: 'store',
         },
       ],
+      depthStencilAttachment: {
+        view: this.depthTextureView,
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'discard',
+      },
     });
 
     if (this.renderFinal) {
@@ -113,6 +145,15 @@ export class DemoClusterForward implements Demo {
 
   resize(): void {
     this.allocateViewports();
+    const w = canvasCtx.canvas.width;
+    const h = canvasCtx.canvas.height;
+    this.depthTexture = device.createTexture({
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      format: DEPTH_FORMAT,
+      size: [w, h, 1],
+      dimension: '2d',
+    });
+    this.depthTextureView = this.depthTexture.createView();
   }
 
   dispose(): void {
@@ -122,7 +163,7 @@ export class DemoClusterForward implements Demo {
 
 class FrustumHelper {
   viewport: Vec4 = [0, 0, 1, 1];
-  cameraPosition: Vec3 = [4, 4, 4];
+  cameraPosition: Vec3 = [0, 0, 4];
   cameraXYPlaneDeg = 0;
   cameraXYPlaneRadius = 1;
 
@@ -135,7 +176,12 @@ class FrustumHelper {
   bindGroup!: GPUBindGroup;
   renderBundle!: GPURenderBundle;
   view!: { matrix: Float32Array; projection: Float32Array; zRange: Float32Array };
-  frustum!: { mapping: Float32Array; clusterSize: Uint32Array };
+  frustum!: {
+    projection: Float32Array;
+    mapping: Float32Array;
+    clusterSize: Uint32Array;
+    depthSplitMethod: Uint32Array;
+  };
   vertexBuffer!: GPUBuffer;
   indexBuffer!: GPUBuffer;
 
@@ -188,6 +234,11 @@ class FrustumHelper {
         cullMode: 'back',
         frontFace: 'cw',
       },
+      depthStencil: {
+        format: DEPTH_FORMAT,
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      },
     });
   }
 
@@ -209,12 +260,14 @@ class FrustumHelper {
       true,
     );
 
-    this.frustumUniforms = new Float32Array(16 + 3);
+    this.frustumUniforms = new Float32Array(16 + 16 + 4);
     this.frustum = {
       mapping: new Float32Array(this.frustumUniforms.buffer, 0, 16),
-      clusterSize: new Uint32Array(this.frustumUniforms.buffer, 16 * 4, 3),
+      projection: new Float32Array(this.frustumUniforms.buffer, 16 * 4, 16),
+      clusterSize: new Uint32Array(this.frustumUniforms.buffer, 16 * 4 * 2, 3),
+      depthSplitMethod: new Uint32Array(this.frustumUniforms.buffer, 16 * 4 * 2 + 3 * 4, 1),
     };
-    this.frustum.clusterSize.set([1, 1, 1]);
+    this.frustum.clusterSize.set(this.params.clusterSize.value);
     this.frustumUniformsBuffer = createBuffer(
       this.frustumUniforms,
       GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -262,11 +315,11 @@ class FrustumHelper {
     const [, , w, h] = this.viewport;
     const { zRange } = this.params;
     const [near, far] = zRange.value;
-    mat4.perspectiveZO(this.view.projection, vfov, w / h, near, far);
-    mat4.invert(this.frustum.mapping, this.view.projection);
+    mat4.perspectiveZO(this.view.projection, vfov, w / h, 1, 1000);
+    mat4.invert(this.frustum.mapping, mat4.perspectiveZO(mat4.create(), vfov, w / h, near, far));
     this.view.zRange.set(zRange.value);
     const cameraLocal = mat4.create();
-    mat4.targetTo(cameraLocal, this.cameraPosition, [0, 0, -far], [0, 1, 0]);
+    mat4.targetTo(cameraLocal, this.cameraPosition, [0, 0, -near], [0, 1, 0]);
     mat4.invert(this.view.matrix, cameraLocal);
   }
 
@@ -278,9 +331,15 @@ class FrustumHelper {
   draw(passEncoder: GPURenderPassEncoder) {
     // move camera round
     this.cameraXYPlaneDeg = (this.cameraXYPlaneDeg + 1) % 360;
-    this.cameraPosition[0] = Math.cos(degToRad(this.cameraXYPlaneDeg)) * this.cameraXYPlaneRadius;
-    this.cameraPosition[1] = Math.sin(degToRad(this.cameraXYPlaneDeg)) * this.cameraXYPlaneRadius;
+    if (this.params.animateCamera.value) {
+      this.cameraPosition[0] = Math.cos(degToRad(this.cameraXYPlaneDeg)) * this.cameraXYPlaneRadius;
+      this.cameraPosition[1] = Math.sin(degToRad(this.cameraXYPlaneDeg)) * this.cameraXYPlaneRadius;
+    } else {
+      this.cameraPosition[0] = 0;
+      this.cameraPosition[1] = 0;
+    }
     this.updateCamera();
+    this.frustum.depthSplitMethod[0] = DepthSplitMethod[this.params.frustumDepth.value] || 0;
 
     // update buffers TODO update ondemand
     queue.writeBuffer(this.frustumUniformsBuffer, 0, this.frustumUniforms);
@@ -318,4 +377,17 @@ class ViewportSpliter {
       return [0, height * (this.splitLen - 1 - id), width, height];
     }
   }
+}
+
+function idToGridId(n: number, gridSize: Vec3) {
+  let x = Math.floor(n / (gridSize[1] * gridSize[2]));
+  let y = Math.floor((n % (gridSize[1] * gridSize[2])) / gridSize[2]);
+  let z = (n % (gridSize[1] * gridSize[2])) % gridSize[2];
+  return { x, y, z };
+}
+
+const gridSize: Vec3 = [1, 1, 2];
+
+for (let i = 0; i < gridSize[0] * gridSize[1] * gridSize[2]; i++) {
+  console.log(i, idToGridId(i, gridSize));
 }
