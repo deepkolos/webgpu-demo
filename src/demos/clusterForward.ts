@@ -4,6 +4,7 @@ import { createBuffer, degToRad, Demo } from './demo';
 import FrustumVertCode from '../shaders/frustum.vert.wgsl?raw';
 import FrustumFragCode from '../shaders/frustum.frag.wgsl?raw';
 import { mat4 } from 'gl-matrix';
+import { cubePrimitives } from '../assets/boxPrimitivs';
 
 const vfov = degToRad(45);
 
@@ -135,6 +136,8 @@ class FrustumHelper {
   renderBundle!: GPURenderBundle;
   view!: { matrix: Float32Array; projection: Float32Array; zRange: Float32Array };
   frustum!: { mapping: Float32Array; clusterSize: Uint32Array };
+  vertexBuffer!: GPUBuffer;
+  indexBuffer!: GPUBuffer;
 
   constructor(
     public renderBundleDescriptor: GPURenderBundleEncoderDescriptor,
@@ -154,7 +157,19 @@ class FrustumHelper {
     });
     this.pipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
-      vertex: { entryPoint: 'main', module: device.createShaderModule({ code: FrustumVertCode }) },
+      vertex: {
+        entryPoint: 'main',
+        module: device.createShaderModule({ code: FrustumVertCode }),
+        buffers: [
+          {
+            arrayStride: 4 * 3,
+            stepMode: 'vertex',
+            attributes: [
+              { shaderLocation: 0, offset: 0, format: 'float32x3' }, // position
+            ],
+          },
+        ],
+      },
       fragment: {
         entryPoint: 'main',
         module: device.createShaderModule({ code: FrustumFragCode }),
@@ -169,16 +184,15 @@ class FrustumHelper {
         ],
       },
       primitive: {
-        // topology: 'point-list',
-        // topology: 'line-strip',
-        topology: 'triangle-strip',
-        stripIndexFormat: 'uint32',
+        topology: 'triangle-list',
         cullMode: 'back',
+        frontFace: 'cw',
       },
     });
   }
 
   initResource() {
+    // uniforms
     this.viewUniforms = new Float32Array(16 + 16 + 2);
     this.view = {
       matrix: new Float32Array(this.viewUniforms.buffer, 0, 16), // camera's world matrix invert
@@ -214,14 +228,26 @@ class FrustumHelper {
         { binding: 1, resource: { buffer: this.frustumUniformsBuffer } },
       ],
     });
+
+    // attributes
+    // prettier-ignore
+    this.vertexBuffer = createBuffer(new Float32Array(cubePrimitives.position), GPUBufferUsage.VERTEX, true);
+    this.indexBuffer = createBuffer(
+      new Uint32Array(cubePrimitives.indices),
+      GPUBufferUsage.INDEX,
+      true,
+    );
   }
 
   initRenderBundle() {
     const { clusterSize } = this.frustum;
+    const instanceCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
     const encoder = device.createRenderBundleEncoder(this.renderBundleDescriptor);
     encoder.setPipeline(this.pipeline);
     encoder.setBindGroup(0, this.bindGroup);
-    encoder.draw(14, clusterSize[0] * clusterSize[1] * clusterSize[2]);
+    encoder.setVertexBuffer(0, this.vertexBuffer);
+    encoder.setIndexBuffer(this.indexBuffer, 'uint32');
+    encoder.drawIndexed(36, instanceCount);
     this.renderBundle = encoder.finish({ label: 'FrustumBundle' });
   }
 
