@@ -72,6 +72,22 @@ fn main(input: VertexInput) -> VertexOutput {
         let translate = translateTopLeft + vec4<f32>(clusterId.xy * translatePerCluster.xy, depthNDCStart, 0.0);
         posWorld = frustum.mapping * (vec4<f32>(scale, 1.0) * posClip + translate);
     } else {
+
+        let depthVSStart = view.near * pow(view.far / view.near, f32(clusterZ) / f32(frustum.clusterSize.z));
+        let depthVSEnd = view.near * pow(view.far / view.near, f32(clusterZ + 1u) / f32(frustum.clusterSize.z));
+        // 转会NDC下z值
+        let depthNDCStartV3 = (frustum.projection * vec4<f32>(0.0, 0.0, -depthVSStart, 1.0));
+        let depthNDCEndV3 = (frustum.projection * vec4<f32>(0.0, 0.0, -depthVSEnd, 1.0));
+        let depthNDCStart = depthNDCStartV3.z / depthNDCStartV3.w;
+        let depthNDCEnd = depthNDCEndV3.z / depthNDCEndV3.w;
+        var scale = 1.0 / vec3<f32>(frustum.clusterSize);
+        // 透视除法之后才是ndc depth
+        scale.z = depthNDCEnd - depthNDCStart;
+
+        let translateTopLeft = vec4<f32>(-0.5 * (1.0 - scale.xy) * 2.0, 0.0, 0.0);
+        let translatePerCluster = scale * vec3<f32>(2.0, 2.0, 1.0);
+        let translate = translateTopLeft + vec4<f32>(clusterId.xy * translatePerCluster.xy, depthNDCStart, 0.0);
+        posWorld = frustum.mapping * (vec4<f32>(scale, 1.0) * posClip + translate);
     }
 
     output.position = view.projection * view.matrix * posWorld;

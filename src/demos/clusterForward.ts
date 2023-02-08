@@ -9,9 +9,9 @@ import { cubePrimitives } from '../assets/boxPrimitivs';
 const vfov = degToRad(45);
 const DEPTH_FORMAT = 'depth24plus';
 const DepthSplitMethod: { [k: string]: number } = {
-  'ndc-even': 0,
-  'view-space-even': 1,
-  'DOOM-2016-Siggraph': 2,
+  'ndc-even': 0, // screen space uneven
+  'view-space-even': 1, // screen space uneven
+  'DOOM-2016-Siggraph': 2, // screen space even
 };
 
 type Params = {
@@ -66,7 +66,7 @@ export class DemoClusterForward implements Demo {
         onChange: (v: string) => {},
       },
       clusterSize: {
-        value: [1, 1, 3],
+        value: [1, 1, 20],
         range: [1, 32],
         onChange: (v: [number, number, number]) => {
           this.frustumHelper.setClusterSize(v);
@@ -83,16 +83,16 @@ export class DemoClusterForward implements Demo {
         onChange: (v: Vec2) => {},
       },
       frustumDepth: {
-        value: 'view-space-even',
+        value: 'DOOM-2016-Siggraph',
         options: ['ndc-even', 'view-space-even', 'DOOM-2016-Siggraph'],
         onChange: (v: string) => {},
       },
       animateCamera: {
-        value: true,
+        value: false,
         onChange: (v: boolean) => {},
       },
       aerialView: {
-        value: true,
+        value: false,
         onChange: (v: boolean) => {},
       },
     };
@@ -324,13 +324,6 @@ class FrustumHelper {
 
     mat4.perspectiveZO(this.frustum.projection, vfov, w / h, near, far);
     mat4.invert(this.frustum.mapping, this.frustum.projection);
-
-    // const ndc = vec4.transformMat4(
-    //   vec4.create(),
-    //   vec4.fromValues(0, 0, -(near + (far - near) * (3 / 3)), 1),
-    //   this.frustum.projection,
-    // );
-    // console.log(ndc[2] / ndc[3]);
 
     mat4.targetTo(this.view.matrix, this.cameraPosition, [0, 0, -near], [0, 1, 0]);
     mat4.invert(this.view.matrix, this.view.matrix);
