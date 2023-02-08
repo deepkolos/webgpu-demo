@@ -119,6 +119,7 @@ function genOptions(opts: Record<string, Options>) {
         opt.value = select.value;
         opt.onChange(select.value, els, opt, optName);
       };
+      select.value = opt.value;
       content.append(select);
     } else if (isValueStr) {
       const input = document.createElement('input');

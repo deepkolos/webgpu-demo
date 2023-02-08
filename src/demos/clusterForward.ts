@@ -3,7 +3,7 @@ import { GenOptions, Refs } from '../ui';
 import { createBuffer, degToRad, Demo } from './demo';
 import FrustumVertCode from '../shaders/frustum.vert.wgsl?raw';
 import FrustumFragCode from '../shaders/frustum.frag.wgsl?raw';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec4 } from 'gl-matrix';
 import { cubePrimitives } from '../assets/boxPrimitivs';
 
 const vfov = degToRad(45);
@@ -20,6 +20,7 @@ type Params = {
   lightNum: { value: number; range: Vec2; onChange: (v: number) => void };
   zRange: { value: Vec2; range: Vec2; onChange: (v: Vec2) => void };
   animateCamera: { value: boolean; onChange: (v: boolean) => void };
+  aerialView: { value: boolean; onChange: (v: boolean) => void };
   frustumDepth: { value: string; options: string[]; onChange: (v: string) => void };
 };
 
@@ -65,7 +66,7 @@ export class DemoClusterForward implements Demo {
         onChange: (v: string) => {},
       },
       clusterSize: {
-        value: [3, 3, 3],
+        value: [1, 1, 3],
         range: [1, 32],
         onChange: (v: [number, number, number]) => {
           this.frustumHelper.setClusterSize(v);
@@ -82,11 +83,15 @@ export class DemoClusterForward implements Demo {
         onChange: (v: Vec2) => {},
       },
       frustumDepth: {
-        value: 'ndc-even',
+        value: 'view-space-even',
         options: ['ndc-even', 'view-space-even', 'DOOM-2016-Siggraph'],
         onChange: (v: string) => {},
       },
       animateCamera: {
+        value: true,
+        onChange: (v: boolean) => {},
+      },
+      aerialView: {
         value: true,
         onChange: (v: boolean) => {},
       },
@@ -316,11 +321,21 @@ class FrustumHelper {
     const { zRange } = this.params;
     const [near, far] = zRange.value;
     mat4.perspectiveZO(this.view.projection, vfov, w / h, 1, 1000);
-    mat4.invert(this.frustum.mapping, mat4.perspectiveZO(mat4.create(), vfov, w / h, near, far));
+
+    mat4.perspectiveZO(this.frustum.projection, vfov, w / h, near, far);
+    mat4.invert(this.frustum.mapping, this.frustum.projection);
+
+    // const ndc = vec4.transformMat4(
+    //   vec4.create(),
+    //   vec4.fromValues(0, 0, -(near + (far - near) * (3 / 3)), 1),
+    //   this.frustum.projection,
+    // );
+    // console.log(ndc[2] / ndc[3]);
+
+    mat4.targetTo(this.view.matrix, this.cameraPosition, [0, 0, -near], [0, 1, 0]);
+    mat4.invert(this.view.matrix, this.view.matrix);
+
     this.view.zRange.set(zRange.value);
-    const cameraLocal = mat4.create();
-    mat4.targetTo(cameraLocal, this.cameraPosition, [0, 0, -near], [0, 1, 0]);
-    mat4.invert(this.view.matrix, cameraLocal);
   }
 
   setViewport(size: Vec4) {
@@ -337,6 +352,10 @@ class FrustumHelper {
     } else {
       this.cameraPosition[0] = 0;
       this.cameraPosition[1] = 0;
+    }
+    if (this.params.aerialView.value) {
+      this.cameraPosition[0] = 0;
+      this.cameraPosition[1] = 28;
     }
     this.updateCamera();
     this.frustum.depthSplitMethod[0] = DepthSplitMethod[this.params.frustumDepth.value] || 0;
