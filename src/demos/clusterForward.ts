@@ -66,7 +66,7 @@ export class DemoClusterForward implements Demo {
         onChange: (v: string) => {},
       },
       clusterSize: {
-        value: [1, 1, 20],
+        value: [2, 2, 4],
         range: [1, 32],
         onChange: (v: [number, number, number]) => {
           this.frustumHelper.setClusterSize(v);
@@ -88,7 +88,7 @@ export class DemoClusterForward implements Demo {
         onChange: (v: string) => {},
       },
       animateCamera: {
-        value: false,
+        value: true,
         onChange: (v: boolean) => {},
       },
       aerialView: {
@@ -236,12 +236,13 @@ class FrustumHelper {
       },
       primitive: {
         topology: 'triangle-list',
+        // topology: 'line-list',
         cullMode: 'back',
         frontFace: 'cw',
       },
       depthStencil: {
         format: DEPTH_FORMAT,
-        depthWriteEnabled: true,
+        depthWriteEnabled: false,
         depthCompare: 'less',
       },
     });
@@ -300,12 +301,14 @@ class FrustumHelper {
   initRenderBundle() {
     const { clusterSize } = this.frustum;
     const instanceCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
+    const instanceRange = [0, instanceCount];
+    // const instanceRange = [3, 4];
     const encoder = device.createRenderBundleEncoder(this.renderBundleDescriptor);
     encoder.setPipeline(this.pipeline);
     encoder.setBindGroup(0, this.bindGroup);
     encoder.setVertexBuffer(0, this.vertexBuffer);
     encoder.setIndexBuffer(this.indexBuffer, 'uint32');
-    encoder.drawIndexed(36, instanceCount);
+    encoder.drawIndexed(36, instanceRange[1] - instanceRange[0],0, 0, instanceRange[0]);
     this.renderBundle = encoder.finish({ label: 'FrustumBundle' });
   }
 
