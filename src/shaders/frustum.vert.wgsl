@@ -34,6 +34,11 @@ struct VertexOutput {
   @location(0) color: vec4<f32>,
 }
 
+fn viewDepthToNDCDepth(depth: f32) -> f32 {
+    let v3 = (frustum.projection * vec4<f32>(0.0, 0.0, depth, 1.0));
+    return v3.z / v3.w;
+}
+
 @vertex
 fn main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -49,17 +54,16 @@ fn main(input: VertexInput) -> VertexOutput {
     let clusterX = (clusterIndex % (frustum.clusterSize.y * frustum.clusterSize.x)) % frustum.clusterSize.x;
 
     let clusterId = vec3<f32>(f32(clusterX), f32(clusterY), f32(clusterZ));
+    var scale = 1.0 / vec3<f32>(frustum.clusterSize);
     let posClip = vec4<f32>(input.position, 1.0);
+    // x/y 居中挪到左上角, z无需位移
+    let translateTopLeft = vec4<f32>(-0.5 * (1.0 - scale.xy) * 2.0, 0.0, 0.0);
+    let translatePerCluster = scale * vec3<f32>(2.0, 2.0, 1.0);
 
-    var posWorld: vec4<f32>;
+    var translate: vec4<f32>;
     if frustum.depthSplitMethod == 0u {
-
-        let scale = 1.0 / vec3<f32>(frustum.clusterSize);
-        // x/y 居中挪到左上角, z无需位移
-        let translateTopLeft = vec4<f32>(-0.5 * (1.0 - scale.xy) * 2.0, 0.0, 0.0);
-        let translatePerCluster = scale * vec3<f32>(2.0, 2.0, 1.0);
-        let translate = translateTopLeft + vec4<f32>(clusterId * translatePerCluster, 0.0);
-        posWorld = frustum.mapping * (vec4<f32>(scale, 1.0) * posClip + translate);
+        // ndc space even
+        translate = vec4<f32>(clusterId * translatePerCluster, 0.0);
     } else {
 
         var depthVSStart: f32;
@@ -67,8 +71,8 @@ fn main(input: VertexInput) -> VertexOutput {
         if frustum.depthSplitMethod == 1u {
             // view space even 
             let depthVSPerCluster = (view.far - view.near) / f32(frustum.clusterSize.z);
-            depthVSStart = view.near + depthVSPerCluster * f32(clusterZ);
-            depthVSEnd = view.near + depthVSPerCluster * f32(clusterZ + 1u);
+            depthVSStart = fma(depthVSPerCluster, f32(clusterZ), view.near);
+            depthVSEnd = fma(depthVSPerCluster, f32(clusterZ + 1u), view.near);
         } else {
             // doom-2018-siggraph
             depthVSStart = view.near * pow(view.far / view.near, f32(clusterZ) / f32(frustum.clusterSize.z));
@@ -76,19 +80,13 @@ fn main(input: VertexInput) -> VertexOutput {
         }
 
         // 转回NDC下z值
-        let depthNDCStartV3 = (frustum.projection * vec4<f32>(0.0, 0.0, -depthVSStart, 1.0));
-        let depthNDCEndV3 = (frustum.projection * vec4<f32>(0.0, 0.0, -depthVSEnd, 1.0));
-        let depthNDCStart = depthNDCStartV3.z / depthNDCStartV3.w;
-        let depthNDCEnd = depthNDCEndV3.z / depthNDCEndV3.w;
-        var scale = 1.0 / vec3<f32>(frustum.clusterSize);
-        // 透视除法之后才是ndc depth
-        scale.z = depthNDCEnd - depthNDCStart;
-
-        let translateTopLeft = vec4<f32>(-0.5 * (1.0 - scale.xy) * 2.0, 0.0, 0.0);
-        let translatePerCluster = scale * vec3<f32>(2.0, 2.0, 1.0);
-        let translate = translateTopLeft + vec4<f32>(clusterId.xy * translatePerCluster.xy, depthNDCStart, 0.0);
-        posWorld = frustum.mapping * (vec4<f32>(scale, 1.0) * posClip + translate);
+        let depthNDCStart = viewDepthToNDCDepth(-depthVSStart);
+        scale.z = viewDepthToNDCDepth(-depthVSEnd) - depthNDCStart;
+        translate = vec4<f32>(clusterId.xy * translatePerCluster.xy, depthNDCStart, 0.0);
     }
+
+    // let posWorld = frustum.mapping * (vec4<f32>(scale, 1.0) * posClip + translateTopLeft + translate);
+    let posWorld = frustum.mapping * fma(vec4<f32>(scale, 1.0), posClip, translateTopLeft + translate);
 
     output.position = view.projection * view.matrix * posWorld;
     // output.color = vec4<f32>(colors[(input.vertexIndex / 4u + clusterIndex) % 6u], 1.0);
@@ -99,8 +97,7 @@ fn main(input: VertexInput) -> VertexOutput {
     //   output.color = vec4<f32>(colors[clusterIndex % 6u], 1.0);
     // }
 
-    output.color = vec4<f32>(colors[clusterIndex % 6u], 0.5);
-
+    output.color = vec4<f32>(colors[clusterIndex % 6u], max(0.2, 1.0 - f32(clusterZ) / f32(frustum.clusterSize.z)));
 
     return output;
 }

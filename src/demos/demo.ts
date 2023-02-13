@@ -33,7 +33,7 @@ export const align = (len: number, alignment: number = 4) => {
 };
 
 export function createBuffer(
-  data: Float32Array | Uint32Array,
+  data: Float32Array | Uint32Array | Uint8Array,
   usage: GPUFlagsConstant,
   mappedAtCreation = false,
   alignment = 16,
