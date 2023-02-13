@@ -53,3 +53,5 @@ export function createBuffer(
 
 export const degToRad = (deg: number) => (Math.PI * deg) / 180;
 export const radToDeg = (rad: number) => (rad * 180) / Math.PI;
+export const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min;
+export const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));

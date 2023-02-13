@@ -91,6 +91,10 @@ a {
   align-items: center;
 }
 
+.opt-can {
+  padding: 3px 6px;
+}
+
 .opt-vec-input {
   width: 40px;
 }

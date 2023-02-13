@@ -1,16 +1,27 @@
-var<private> colors = array<vec3<f32>, 6>(
+// FIXME 改const 但是wgsl没更新到最新, 会提示报错
+var<private> colors = array<vec3<f32>, 7>(
     vec3<f32>(1.0, 0.0, 0.0),
     vec3<f32>(0.0, 1.0, 0.0),
     vec3<f32>(0.0, 0.0, 1.0),
     vec3<f32>(1.0, 1.0, 0.0),
     vec3<f32>(0.0, 1.0, 1.0),
     vec3<f32>(1.0, 0.0, 1.0),
+    vec3<f32>(0.0, 0.0, 0.0),
 );
 
 var<private> bottomLeftNear = vec4<f32>(-1.0, -1.0, 0.0, 1.0);
 var<private> bottomLeftFar = vec4<f32>(-1.0, -1.0, 1.0, 1.0);
 var<private> topRightNear = vec4<f32>(1.0, 1.0, 0.0, 1.0);
 var<private> topRightFar = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+
+var<private> spritePosition = array<vec2<f32>, 6>(
+    vec2<f32>(-1.0, -1.0),
+    vec2<f32>(-1.0, 1.0),
+    vec2<f32>(1.0, 1.0),
+    vec2<f32>(-1.0, -1.0),
+    vec2<f32>(1.0, 1.0),
+    vec2<f32>(1.0, -1.0),
+);
 
 struct ViewUniforms {
   matrix: mat4x4<f32>, // camera's world matrix invert
@@ -61,16 +72,22 @@ struct ClusterLightsIndices {
 @group(0) @binding(4) var<storage, read_write> clusterLights: ClusterLights;
 @group(0) @binding(5) var<storage, read_write> clusterIndices: ClusterLightsIndices;
 
+
 fn viewDepthToNDCDepth(depth: f32) -> f32 {
     let v3 = (frustum.projection * vec4<f32>(0.0, 0.0, depth, 1.0));
     return v3.z / v3.w;
+}
+
+fn clipToView(clip: vec4<f32>) -> vec4<f32> {
+    let view = frustum.mapping * clip;
+    return view / vec4<f32>(view.w, view.w, view.w, view.w);
 }
 
 struct ScaleTranslate {
   translate: vec4<f32>,
   scale: vec4<f32>,
 }
-fn calcNDCToViewST(clusterId: vec3<f32>) -> ScaleTranslate {
+fn calcNDCToClipST(clusterId: vec3<f32>) -> ScaleTranslate {
     var scale = 1.0 / vec3<f32>(frustum.clusterSize);
     // x/y 居中挪到左上角, z无需位移
     let translateTopLeft = vec4<f32>(-0.5 * (1.0 - scale.xy) * 2.0, 0.0, 0.0);
@@ -87,10 +104,10 @@ fn calcNDCToViewST(clusterId: vec3<f32>) -> ScaleTranslate {
         if frustum.depthSplitMethod == 1u {
             // view space even 
             let depthVSPerCluster = (view.far - view.near) / f32(frustum.clusterSize.z);
-            // depthVSStart = fma(depthVSPerCluster, clusterId.z, view.near);
-            // depthVSEnd = fma(depthVSPerCluster, clusterId.z + 1.0, view.near);
-            depthVSStart = (depthVSPerCluster * clusterId.z + view.near);
-            depthVSEnd = (depthVSPerCluster * (clusterId.z + 1.0) + view.near);
+            depthVSStart = fma(depthVSPerCluster, clusterId.z, view.near);
+            depthVSEnd = fma(depthVSPerCluster, clusterId.z + 1.0, view.near);
+            // depthVSStart = (depthVSPerCluster * clusterId.z + view.near);
+            // depthVSEnd = (depthVSPerCluster * (clusterId.z + 1.0) + view.near);
         } else {
             // doom-2018-siggraph
             depthVSStart = view.near * pow(view.far / view.near, clusterId.z / f32(frustum.clusterSize.z));
@@ -137,69 +154,70 @@ struct FrustumIn {
 struct FrustumOut {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
+  @location(1) clusterIndex: f32,
 }
 
 @vertex
 fn frustumVertex(input: FrustumIn) -> FrustumOut {
     var output: FrustumOut;
     // x * y * z
-    // var clusterIndex = input.instanceIndex;
-    // let clusterX = clusterIndex / (frustum.clusterSize.y * frustum.clusterSize.z);
-    // let clusterY = (clusterIndex % (frustum.clusterSize.y * frustum.clusterSize.z)) / frustum.clusterSize.z;
-    // let clusterZ = (clusterIndex % (frustum.clusterSize.y * frustum.clusterSize.z)) % frustum.clusterSize.z;
-    // z * y * x 透明绘制需要z值大的先绘制
-    var clusterIndex = frustum.clusterSize.y * frustum.clusterSize.z * frustum.clusterSize.x - input.instanceIndex - 1u;
-    let clusterZ = clusterIndex / (frustum.clusterSize.y * frustum.clusterSize.x);
-    let clusterY = (clusterIndex % (frustum.clusterSize.y * frustum.clusterSize.x)) / frustum.clusterSize.x;
-    let clusterX = (clusterIndex % (frustum.clusterSize.y * frustum.clusterSize.x)) % frustum.clusterSize.x;
+    var clusterIndex = input.instanceIndex;
+    let clusterSizeYZ = frustum.clusterSize.y * frustum.clusterSize.z;
+    let clusterX = clusterIndex / clusterSizeYZ;
+    let clusterY = (clusterIndex % clusterSizeYZ) / frustum.clusterSize.z;
+    let clusterZ = (clusterIndex % clusterSizeYZ) % frustum.clusterSize.z;
+    // z * y * x 透明绘制需要z值大的先绘制, 但是绘制cluster lights的时候结果不对, 奇怪...
+    // let clusterIndex = frustum.clusterSize.y * frustum.clusterSize.z * frustum.clusterSize.x - input.instanceIndex - 1u;
+    // let clusterSizeXY = frustum.clusterSize.y * frustum.clusterSize.x;
+    // let clusterZ = clusterIndex / clusterSizeXY;
+    // let clusterY = (clusterIndex % clusterSizeXY) / frustum.clusterSize.x;
+    // let clusterX = (clusterIndex % clusterSizeXY) % frustum.clusterSize.x;
     let clusterId = vec3<f32>(f32(clusterX), f32(clusterY), f32(clusterZ));
 
-    let scaleTranslate = calcNDCToViewST(clusterId);
-    // let posWorld = frustum.mapping * fma(scaleTranslate.scale, vec4<f32>(input.position, 1.0), scaleTranslate.translate);
-    let posWorld = frustum.mapping * (scaleTranslate.scale * vec4<f32>(input.position, 1.0) + scaleTranslate.translate);
+    let scaleTranslate = calcNDCToClipST(clusterId);
+    let posWorld = clipToView(fma(scaleTranslate.scale, vec4<f32>(input.position, 1.0), scaleTranslate.translate));
+    // let posWorld = frustum.mapping * (scaleTranslate.scale * vec4<f32>(input.position, 1.0) + scaleTranslate.translate);
 
     output.position = view.projection * view.matrix * posWorld;
-    output.color = vec4<f32>(colors[clusterIndex % 6u], max(0.2, 1.0 - clusterId.z / f32(frustum.clusterSize.z)));
-    // output.color = vec4<f32>(colors[(input.vertexIndex / 4u + clusterIndex) % 6u], 1.0);
-    // output.color = vec4<f32>(colors[clusterIndex % 6u], 1.0);
-
-    // if clusterZ % 2u == 0u {
-    //   output.color = vec4<f32>(colors[clusterIndex % 6u], 0.5);
-    // } else {
-    //   output.color = vec4<f32>(colors[clusterIndex % 6u], 1.0);
-    // }
-
-    // output.position = vec4<f32>(output.position.x, output.position.y, output.position.z, 1.0);
-    // output.position = vec4<f32>(input.position * 0.5, 1.0);
-    // output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    // output.color = vec4<f32>(1.0);
+    // output.color = vec4<f32>(colors[clusterIndex % 6u], max(0.2, 1.0 - clusterId.z / f32(frustum.clusterSize.z)));
+    output.color = vec4<f32>(colors[clusterIndex % 6u], 1.0);
+    output.clusterIndex = f32(clusterIndex);
 
     return output;
 }
 
 @fragment
-fn frustumFragment(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {
+fn frustumFragment(@location(0) color: vec4<f32>, @location(1) clusterIndex: f32) -> @location(0) vec4<f32> {
     // return vec4<f32>(1.0, 1.0, 1.0, 1.0);
-    return color;
+    let lightsInfo = clusterLights.lights[u32(clusterIndex)];
+    if (lightsInfo.count == 0u) {
+      discard;
+    }
+    return vec4<f32>(colors[6u - lightsInfo.count], clamp(f32(lightsInfo.count), 0.0, 1.0));
+    // return vec4<f32>(color.xyz, clamp(f32(lightsInfo.count), 0.0, 1.0));
+    // return color;
 }
 
 //////////////////////// ClusterBounds ////////////////////////
 
 @compute @workgroup_size(64)
 fn computeClusterBounds(@builtin(global_invocation_id) g_invoc_id: vec3<u32>) {
+    if g_invoc_id.x >= (frustum.clusterSize.y * frustum.clusterSize.z * frustum.clusterSize.x) {
+        return;
+    }
     let clusterIndex = g_invoc_id.x;
-    let clusterSizeXY = frustum.clusterSize.y * frustum.clusterSize.z;
-    let clusterX = clusterIndex / clusterSizeXY;
-    let clusterY = (clusterIndex % clusterSizeXY) / frustum.clusterSize.z;
-    let clusterZ = (clusterIndex % clusterSizeXY) % frustum.clusterSize.z;
+    let clusterSizeYZ = frustum.clusterSize.y * frustum.clusterSize.z;
+    let clusterX = clusterIndex / clusterSizeYZ;
+    let clusterY = (clusterIndex % clusterSizeYZ) / frustum.clusterSize.z;
+    let clusterZ = (clusterIndex % clusterSizeYZ) % frustum.clusterSize.z;
     let clusterId = vec3<f32>(f32(clusterX), f32(clusterY), f32(clusterZ));
 
-    let st = calcNDCToViewST(clusterId);
+    let st = calcNDCToClipST(clusterId);
 
-    let bottomLeftNearVS = frustum.mapping * fma(st.scale, bottomLeftNear, st.translate);
-    let bottomLeftFarVS = frustum.mapping * fma(st.scale, bottomLeftFar, st.translate);
-    let topRightNearVS = frustum.mapping * fma(st.scale, topRightNear, st.translate);
-    let topRightFarVS = frustum.mapping * fma(st.scale, topRightFar, st.translate);
+    let bottomLeftNearVS = clipToView(fma(st.scale, bottomLeftNear, st.translate));
+    let bottomLeftFarVS = clipToView(fma(st.scale, bottomLeftFar, st.translate));
+    let topRightNearVS = clipToView(fma(st.scale, topRightNear, st.translate));
+    let topRightFarVS = clipToView(fma(st.scale, topRightFar, st.translate));
 
     clusterBounds.bounds[clusterIndex].minAABB = min(min(bottomLeftNearVS, bottomLeftFarVS), min(topRightNearVS, topRightFarVS)).xyz;
     clusterBounds.bounds[clusterIndex].maxAABB = max(max(bottomLeftNearVS, bottomLeftFarVS), max(topRightNearVS, topRightFarVS)).xyz;
@@ -209,6 +227,9 @@ fn computeClusterBounds(@builtin(global_invocation_id) g_invoc_id: vec3<u32>) {
 
 @compute @workgroup_size(64)
 fn computeClusterLights(@builtin(global_invocation_id) g_invoc_id: vec3<u32>) {
+    if g_invoc_id.x >= frustum.clusterSize.y * frustum.clusterSize.z * frustum.clusterSize.x {
+        return;
+    }
     let clusterIndex = g_invoc_id.x;
     let bound = clusterBounds.bounds[clusterIndex];
 
@@ -220,14 +241,19 @@ fn computeClusterLights(@builtin(global_invocation_id) g_invoc_id: vec3<u32>) {
         var lightInCluster = range <= 0.0;
 
         if !lightInCluster {
-            let lightViewPos = view.matrix * vec4<f32>(globalLights.lights[i].position, 1.0);
-            let spDist = sqDistPointAABB(lightViewPos.xyz, bound.minAABB, bound.maxAABB);
-            lightInCluster = spDist <= (range * range);
+            // 这里需要乘frustum world matrix invert 只是目前是identity, 所以省略了
+            let lightViewPos = globalLights.lights[i].position;
+            let spDist = sqDistPointAABB(lightViewPos, bound.minAABB, bound.maxAABB);
+            lightInCluster = spDist <= range * range;
         }
 
         if lightInCluster {
             clusterLightCount = clusterLightCount + 1u;
             clusterLightIndices[clusterLightCount] = i;
+        }
+
+        if clusterLightCount == 100u {
+          break;
         }
     }
 
@@ -240,4 +266,30 @@ fn computeClusterLights(@builtin(global_invocation_id) g_invoc_id: vec3<u32>) {
     clusterLights.lights[clusterIndex].offset = offset;
 }
 
-//////////////////////// Shading ////////////////////////
+//////////////////////// Light Sprite ////////////////////////
+
+struct LightSpriteIn {
+  @builtin(vertex_index) vertexIndex: u32,
+  @builtin(instance_index) instanceIndex: u32,
+}
+struct LightSpriteOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) color: vec4<f32>,
+}
+
+@vertex
+fn lightSpriteVertex(input: LightSpriteIn) -> LightSpriteOut {
+    var output: LightSpriteOut;
+    let light = globalLights.lights[input.instanceIndex];
+    let worldPosition = vec4<f32>(light.position, 0.0) + vec4<f32>(spritePosition[input.vertexIndex] * light.range, 0.0, 1.0);
+
+    // output.color = vec4<f32>(light.color, 1.0);
+    output.color = vec4<f32>(colors[input.vertexIndex], 1.0);
+    output.position = view.projection * view.matrix * worldPosition;
+    return output;
+}
+
+@fragment
+fn lightSpriteFragment(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {
+    return color;
+}
