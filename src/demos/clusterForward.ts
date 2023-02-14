@@ -2,7 +2,7 @@ import { canvasCtx, canvasFormat, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
 import { createBuffer, degToRad, Demo, randomBetween, sleep } from './demo';
 import ClusterAllInOneCode from '../shaders/cluster.all-in-one.wgsl?raw';
-import { mat4 } from 'gl-matrix';
+import { mat3, mat4, vec3, vec4 } from 'gl-matrix';
 import { cubePrimitives } from '../assets/boxPrimitives';
 import * as BBO from 'buffer-backed-object';
 
@@ -45,7 +45,7 @@ export class DemoClusterForward implements Demo {
   viewport: Vec4 = [0, 0, 1, 1];
   debugCameraPosition: Vec3 = [0, 0, 4];
   debugCameraXYPlaneDeg = 0;
-  debugCameraXYPlaneRadius = 1;
+  debugCameraXYPlaneRadius = 15;
   clusterBoundsNeedUpdate = true;
   printComputeResults = true;
 
@@ -123,7 +123,7 @@ export class DemoClusterForward implements Demo {
         matrix: Float32Array; // camera's world matrix invert
         projection: Float32Array; zRange: Float32Array;
       };
-    }; frustum: () => { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: { mapping: Float32Array; projection: Float32Array; clusterSize: Uint32Array; depthSplitMethod: Uint32Array; }; }; clusterBounds: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { bounds: { minAABB: Float32Array; maxAABB: Float32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; globalLights: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { ambient: Float32Array; lightCount: Uint32Array; lights: { position: Float32Array; range: Float32Array; color: Float32Array; intensity: Float32Array; }[]; }; }; clusterLights: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { offset: Uint32Array; lights: { offset: Uint32Array; count: Uint32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; clusterIndices: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: BBO.DecodedBuffer<{ indices: BBO.Descriptor<BBO.DecodedBuffer<{ x: BBO.Descriptor<number>; }>[]>; }>; }; cubeVertex: () => { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: {}; }; cubeIndices: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint32Array; view: {}; };
+    }; frustum: () => { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: { mapping: Float32Array; projection: Float32Array; clusterSize: Uint32Array; depthSplitMethod: Uint32Array; }; }; clusterBounds: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { bounds: { minAABB: Float32Array; maxAABB: Float32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; globalLights: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { ambient: Float32Array; lightCount: Uint32Array; lights: { position: Float32Array; range: Float32Array; color: Float32Array; intensity: Float32Array; }[]; }; }; clusterLights: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { offset: Uint32Array; lights: { offset: Uint32Array; count: Uint32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; clusterIndices: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: BBO.DecodedBuffer<{ indices: BBO.Descriptor<BBO.DecodedBuffer<{ x: BBO.Descriptor<number>; }>[]>; }>; }; cubeVertex: () => { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: {}; }; cubeIndices: () => { gpuBuffer: GPUBuffer; cpuBuffer: Uint32Array; view: {}; }; cubeNormal: () => { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: {}; };
   };
   // prettier-ignore
   buffers!: {
@@ -132,7 +132,7 @@ export class DemoClusterForward implements Demo {
         matrix: Float32Array; // camera's world matrix invert
         projection: Float32Array; zRange: Float32Array;
       };
-    }; frustum: { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: { mapping: Float32Array; projection: Float32Array; clusterSize: Uint32Array; depthSplitMethod: Uint32Array; }; }; clusterBounds: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { bounds: { minAABB: Float32Array; maxAABB: Float32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; globalLights: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { ambient: Float32Array; lightCount: Uint32Array; lights: { position: Float32Array; range: Float32Array; color: Float32Array; intensity: Float32Array; }[]; }; }; clusterLights: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { offset: Uint32Array; lights: { offset: Uint32Array; count: Uint32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; clusterIndices: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: BBO.DecodedBuffer<{ indices: BBO.Descriptor<BBO.DecodedBuffer<{ x: BBO.Descriptor<number>; }>[]>; }>; }; cubeVertex: { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: {}; }; cubeIndices: { gpuBuffer: GPUBuffer; cpuBuffer: Uint32Array; view: {}; };
+    }; frustum: { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: { mapping: Float32Array; projection: Float32Array; clusterSize: Uint32Array; depthSplitMethod: Uint32Array; }; }; clusterBounds: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { bounds: { minAABB: Float32Array; maxAABB: Float32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; globalLights: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { ambient: Float32Array; lightCount: Uint32Array; lights: { position: Float32Array; range: Float32Array; color: Float32Array; intensity: Float32Array; }[]; }; }; clusterLights: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: { offset: Uint32Array; lights: { offset: Uint32Array; count: Uint32Array; }[]; }; stagingBuffer: GPUBuffer; read: () => Promise<void>; }; clusterIndices: { gpuBuffer: GPUBuffer; cpuBuffer: Uint8Array; view: BBO.DecodedBuffer<{ indices: BBO.Descriptor<BBO.DecodedBuffer<{ x: BBO.Descriptor<number>; }>[]>; }>; }; cubeVertex: { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: {}; }; cubeIndices: { gpuBuffer: GPUBuffer; cpuBuffer: Uint32Array; view: {}; }; cubeNormal: { gpuBuffer: GPUBuffer; cpuBuffer: Float32Array; view: {}; };
   };
 
   initUI(refs: Refs, genOptions: GenOptions) {
@@ -143,7 +143,7 @@ export class DemoClusterForward implements Demo {
         onChange: (v: string) => {},
       },
       clusterSize: {
-        value: [16, 16, 16],
+        value: [8, 8, 8],
         range: [1, 32],
         onChange: (v: [number, number, number]) => {
           this.buffers.frustum.view.clusterSize.set(v);
@@ -158,7 +158,7 @@ export class DemoClusterForward implements Demo {
         },
       },
       lightNum: {
-        value: 50,
+        value: 20,
         range: [1, 1000],
         onChange: (v: number) => {
           this.buffers.globalLights = this.bufferCreator.globalLights();
@@ -195,8 +195,8 @@ export class DemoClusterForward implements Demo {
         options: ['ndc-space-even', 'view-space-even', 'DOOM-2016-Siggraph'],
         onChange: (v: string) => {},
       },
-      animateCamera: { value: false, onChange: (v: boolean) => {} },
-      aerialView: { value: true, onChange: (v: boolean) => {} },
+      animateCamera: { value: true, onChange: (v: boolean) => {} },
+      aerialView: { value: false, onChange: (v: boolean) => {} },
       drawLightSprite: { value: false, onChange: (v: boolean) => {} },
     };
     genOptions(this.params);
@@ -416,6 +416,12 @@ export class DemoClusterForward implements Demo {
         const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.INDEX, true);
         return { gpuBuffer, cpuBuffer, view };
       },
+      cubeNormal: () => {
+        const cpuBuffer = new Float32Array(cubePrimitives.normal);
+        const view = {};
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true);
+        return { gpuBuffer, cpuBuffer, view };
+      },
     };
     this.buffers = {
       view: this.bufferCreator.view(),
@@ -426,6 +432,7 @@ export class DemoClusterForward implements Demo {
       clusterIndices: this.bufferCreator.clusterIndices(),
       cubeVertex: this.bufferCreator.cubeVertex(),
       cubeIndices: this.bufferCreator.cubeIndices(),
+      cubeNormal: this.bufferCreator.cubeNormal(),
     };
     this.pipelines = {
       frustum: device.createRenderPipeline({
@@ -443,6 +450,13 @@ export class DemoClusterForward implements Demo {
                 { shaderLocation: 0, offset: 0, format: 'float32x3' }, // position
               ],
             },
+            // {
+            //   arrayStride: 4 * 3,
+            //   stepMode: 'vertex',
+            //   attributes: [
+            //     { shaderLocation: 1, offset: 0, format: 'float32x3' }, // normal
+            //   ],
+            // },
           ],
         },
         fragment: {
@@ -465,7 +479,7 @@ export class DemoClusterForward implements Demo {
         },
         depthStencil: {
           format: DEPTH_FORMAT,
-          depthWriteEnabled: false,
+          depthWriteEnabled: true,
           depthCompare: 'less',
         },
       }),
@@ -577,6 +591,7 @@ export class DemoClusterForward implements Demo {
         passEncoder.setPipeline(this.pipelines.frustum);
         passEncoder.setBindGroup(0, this.bindGroups.frustum);
         passEncoder.setVertexBuffer(0, this.buffers.cubeVertex.gpuBuffer);
+        // passEncoder.setVertexBuffer(1, this.buffers.cubeNormal.gpuBuffer);
         passEncoder.setIndexBuffer(this.buffers.cubeIndices.gpuBuffer, 'uint32');
         passEncoder.drawIndexed(36, instanceRange[1] - instanceRange[0], 0, 0, instanceRange[0]);
       },
@@ -651,6 +666,7 @@ export class DemoClusterForward implements Demo {
       view.view.matrix,
       this.debugCameraPosition,
       [0, 0, -((far - near) * 0.5 + near)],
+      // [0, 0, 0],
       this.debugCameraPosition[2] > 0 ? [0, 1, 0] : [0, 0, -1],
     );
     mat4.invert(view.view.matrix, view.view.matrix);
@@ -721,6 +737,8 @@ export class DemoClusterForward implements Demo {
       await this.buffers.clusterBounds.read();
       console.log('clusterLights', this.buffers.clusterLights.view);
       console.log('clusterBounds', this.buffers.clusterBounds.view.bounds);
+
+      // testNormalClipToView(this);
     }
 
     requestAnimationFrame(this.render);
@@ -827,4 +845,25 @@ for (let i = 0; i < gridSize[0] * gridSize[1] * gridSize[2]; i++) {
   });
   const f32 = new Float32Array(buffer);
   console.log('f32', f32);
+}
+
+function testNormalClipToView(demo: DemoClusterForward) {
+  const normal_clip = vec4.fromValues(0, 0, 1, 0);
+  const normal_view = vec4.create();
+  vec4.transformMat4(normal_view, normal_clip, demo.buffers.frustum.view.mapping);
+  // console.log({ normal_clip, normal_view });
+
+  const mappingMat3 = mat3.create();
+  const normal_clip_v3 = vec3.fromValues(0, 1, 0);
+  const normal_view_v3 = vec3.create();
+  mat3.fromMat4(mappingMat3, demo.buffers.frustum.view.mapping);
+  // vec3.transformMat3(normal_view_v3, normal_clip_v3, mappingMat3);
+  vec3.transformMat4(normal_view_v3, normal_clip_v3, demo.buffers.frustum.view.mapping);
+  const normal_view_v3_90 = vec3.rotateX(
+    vec3.create(),
+    normal_view_v3,
+    vec3.create(),
+    degToRad(90),
+  );
+  console.log([...normal_clip_v3], [...normal_view_v3], [...normal_view_v3_90]);
 }

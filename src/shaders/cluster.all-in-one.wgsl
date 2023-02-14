@@ -1,13 +1,15 @@
 // FIXME 改const 但是wgsl没更新到最新, 会提示报错
 var<private> colors = array<vec3<f32>, 7>(
-    vec3<f32>(1.0, 0.0, 0.0),
-    vec3<f32>(0.0, 1.0, 0.0),
-    vec3<f32>(0.0, 0.0, 1.0),
-    vec3<f32>(1.0, 1.0, 0.0),
-    vec3<f32>(0.0, 1.0, 1.0),
-    vec3<f32>(1.0, 0.0, 1.0),
+    vec3<f32>(1.0, 0.0, 0.0), // right
+    vec3<f32>(0.0, 1.0, 0.0), // left
+    vec3<f32>(0.0, 0.0, 1.0), // top
+    vec3<f32>(1.0, 1.0, 0.0), // bottom
+    vec3<f32>(0.0, 1.0, 1.0), // far
+    vec3<f32>(1.0, 0.0, 1.0), // near
     vec3<f32>(0.0, 0.0, 0.0),
 );
+
+var<private> halfPI: f32 = 1.5707963267948966;
 
 var<private> bottomLeftNear = vec4<f32>(-1.0, -1.0, 0.0, 1.0);
 var<private> bottomLeftFar = vec4<f32>(-1.0, -1.0, 1.0, 1.0);
@@ -83,6 +85,22 @@ fn clipToView(clip: vec4<f32>) -> vec4<f32> {
     return view / vec4<f32>(view.w, view.w, view.w, view.w);
 }
 
+fn degToRad(deg: f32) -> f32 {
+    return 3.141592653589793 * deg / 180.0;
+}
+
+fn makeRotationX(rad: f32) -> mat4x4<f32> {
+    let c = cos(rad);
+    let s = sin(rad);
+    return mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, c, -s, 0.0, 0.0, s, c, 0.0, 0.0, 0.0, 0.0, 1.0);
+}
+
+fn makeRotationY(rad: f32) -> mat4x4<f32> {
+    let c = cos(rad);
+    let s = sin(rad);
+    return mat4x4<f32>(c, 0.0, s, 0.0, 0.0, 1.0, 0.0, 0.0, -s, 0.0, c, 0.0, 0.0, 0.0, 0.0, 1.0);
+}
+
 struct ScaleTranslate {
   translate: vec4<f32>,
   scale: vec4<f32>,
@@ -150,11 +168,14 @@ struct FrustumIn {
   @builtin(vertex_index) vertexIndex: u32,
   @builtin(instance_index) instanceIndex: u32,
   @location(0) position: vec3<f32>,
+  // @location(1) normal: vec3<f32>,
 }
 struct FrustumOut {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
   @location(1) clusterIndex: f32,
+  @location(2) normal: vec3<f32>,
+  @location(3) posView: vec3<f32>,
 }
 
 @vertex
@@ -177,25 +198,68 @@ fn frustumVertex(input: FrustumIn) -> FrustumOut {
     let scaleTranslate = calcNDCToClipST(clusterId);
     let posWorld = clipToView(fma(scaleTranslate.scale, vec4<f32>(input.position, 1.0), scaleTranslate.translate));
     // let posWorld = frustum.mapping * (scaleTranslate.scale * vec4<f32>(input.position, 1.0) + scaleTranslate.translate);
-
-    output.position = view.projection * view.matrix * posWorld;
+    let posView = view.matrix * posWorld;
+    output.position = view.projection * posView;
     // output.color = vec4<f32>(colors[clusterIndex % 6u], max(0.2, 1.0 - clusterId.z / f32(frustum.clusterSize.z)));
-    output.color = vec4<f32>(colors[clusterIndex % 6u], 1.0);
+    // output.color = vec4<f32>(colors[clusterIndex % 6u], 1.0);
+    output.color = vec4<f32>(colors[input.vertexIndex / 4u], 1.0);
     output.clusterIndex = f32(clusterIndex);
+    // output.normal = (clipToView(vec4<f32>(input.normal, 0.0))).xyz;
+    // output.normal = input.normal;
+    output.posView = posView.xyz;
+
+    // 计算出frustum的normal
+    var normal: vec3<f32>;
+    let topRightView = clipToView(fma(scaleTranslate.scale, topRightFar, scaleTranslate.translate));
+    let bottomLeftView = clipToView(fma(scaleTranslate.scale, bottomLeftFar, scaleTranslate.translate));
+    switch(input.vertexIndex / 4u) {
+      case 0u: { // right 投影到xz平面, y轴顺时针旋转90度
+            let right = vec4<f32>(topRightView.x, 0.0, topRightView.z, 0.0);
+            normal = (makeRotationY(halfPI) * right).xyz;
+      }
+      case 1u: { // left 投影到xz平面, y轴逆时针旋转90度
+            let left = vec4<f32>(bottomLeftView.x, 0.0, bottomLeftView.z, 0.0);
+            normal = (makeRotationY(-halfPI) * left).xyz;
+      }
+      case 2u: { // top 投影到yz平面, x轴顺时针旋转90度
+            let top = vec4<f32>(0.0, topRightView.y, topRightView.z, 0.0);
+            normal = (makeRotationX(-halfPI) * top).xyz;
+      }
+      case 3u: { // bottom 投影到yz平面, x轴逆时针旋转90度
+            let bottom = vec4<f32>(0.0, bottomLeftView.y, bottomLeftView.z, 0.0);
+            normal = (makeRotationX(halfPI) * bottom).xyz;
+      }
+      case 4u: { // far
+            normal = vec3<f32>(0.0, 0.0, -1.0);
+      }
+      case 5u: { // near
+            normal = vec3<f32>(0.0, 0.0, 1.0);
+      }
+      default: {}
+    }
+
+    output.normal = (view.matrix * vec4<f32>(normal, 0.0)).xyz;
+    // output.normal = normal;
 
     return output;
 }
 
 @fragment
-fn frustumFragment(@location(0) color: vec4<f32>, @location(1) clusterIndex: f32) -> @location(0) vec4<f32> {
+fn frustumFragment(vsOut: FrustumOut) -> @location(0) vec4<f32> {
     // return vec4<f32>(1.0, 1.0, 1.0, 1.0);
-    let lightsInfo = clusterLights.lights[u32(clusterIndex)];
-    if (lightsInfo.count == 0u) {
+    let lightsCount = clamp(clusterLights.lights[u32(vsOut.clusterIndex)].count, 0u, 6u);
+    if (lightsCount == 0u) {
       discard;
     }
-    return vec4<f32>(colors[6u - lightsInfo.count], clamp(f32(lightsInfo.count), 0.0, 1.0));
-    // return vec4<f32>(color.xyz, clamp(f32(lightsInfo.count), 0.0, 1.0));
-    // return color;
+    let color = colors[6u - lightsCount];
+    let normal = normalize(vsOut.normal);
+    let lightDirReversed = normalize(-vsOut.posView);
+    let irradiance = clamp(max(dot(normal, lightDirReversed), 0.0), 0.0, 1.0);
+    // return vec4<f32>(normal, 1.0);
+    // return vec4<f32>(normal * 0.5 + 0.5, 1.0);
+    // return vec4<f32>(-lightDirReversed * 2.0 - 1.0, 1.0);
+    return vec4<f32>(color * irradiance, 1.0);
+    // return vsOut.color;
 }
 
 //////////////////////// ClusterBounds ////////////////////////
