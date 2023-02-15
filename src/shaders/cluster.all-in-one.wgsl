@@ -187,7 +187,7 @@ fn frustumVertex(input: FrustumIn) -> FrustumOut {
     let clusterX = clusterIndex / clusterSizeYZ;
     let clusterY = (clusterIndex % clusterSizeYZ) / frustum.clusterSize.z;
     let clusterZ = (clusterIndex % clusterSizeYZ) % frustum.clusterSize.z;
-    // z * y * x 透明绘制需要z值大的先绘制, 但是绘制cluster lights的时候结果不对, 奇怪...
+    // z * y * x 透明绘制需要z值大的先绘制, 但是绘制cluster lights的时候结果不对, 奇怪..., exclude的cluster可以通过discard实现
     // let clusterIndex = frustum.clusterSize.y * frustum.clusterSize.z * frustum.clusterSize.x - input.instanceIndex - 1u;
     // let clusterSizeXY = frustum.clusterSize.y * frustum.clusterSize.x;
     // let clusterZ = clusterIndex / clusterSizeXY;
@@ -221,11 +221,11 @@ fn frustumVertex(input: FrustumIn) -> FrustumOut {
             let left = vec4<f32>(bottomLeftView.x, 0.0, bottomLeftView.z, 0.0);
             normal = (makeRotationY(-halfPI) * left).xyz;
       }
-      case 2u: { // top 投影到yz平面, x轴顺时针旋转90度
+      case 2u: { // top 投影到yz平面, x轴逆时针旋转90度
             let top = vec4<f32>(0.0, topRightView.y, topRightView.z, 0.0);
             normal = (makeRotationX(-halfPI) * top).xyz;
       }
-      case 3u: { // bottom 投影到yz平面, x轴逆时针旋转90度
+      case 3u: { // bottom 投影到yz平面, x轴顺时针旋转90度
             let bottom = vec4<f32>(0.0, bottomLeftView.y, bottomLeftView.z, 0.0);
             normal = (makeRotationX(halfPI) * bottom).xyz;
       }
@@ -248,7 +248,7 @@ fn frustumVertex(input: FrustumIn) -> FrustumOut {
 fn frustumFragment(vsOut: FrustumOut) -> @location(0) vec4<f32> {
     // return vec4<f32>(1.0, 1.0, 1.0, 1.0);
     let lightsCount = clamp(clusterLights.lights[u32(vsOut.clusterIndex)].count, 0u, 6u);
-    if (lightsCount == 0u) {
+    if lightsCount == 0u {
       discard;
     }
     let color = colors[6u - lightsCount];
@@ -312,8 +312,8 @@ fn computeClusterLights(@builtin(global_invocation_id) g_invoc_id: vec3<u32>) {
         }
 
         if lightInCluster {
-            clusterLightCount = clusterLightCount + 1u;
             clusterLightIndices[clusterLightCount] = i;
+            clusterLightCount = clusterLightCount + 1u;
         }
 
         if clusterLightCount == 100u {
@@ -356,4 +356,137 @@ fn lightSpriteVertex(input: LightSpriteIn) -> LightSpriteOut {
 @fragment
 fn lightSpriteFragment(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {
     return color;
+}
+
+//////////////////////// Scene Sphere ////////////////////////
+
+struct SphereIn {
+  @builtin(instance_index) instanceIndex: u32,
+  @location(0) position: vec3<f32>,
+  @location(1) normal: vec3<f32>,
+}
+struct SphereOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) color: vec4<f32>,
+  @location(2) normal: vec3<f32>,
+  @location(3) posView: vec3<f32>,
+  @location(4) posNDC: vec3<f32>,
+}
+
+@vertex
+fn sphereVertex(input: SphereIn) -> SphereOut {
+    var output: SphereOut;
+    let instanceSize = vec3<u32>(8u, 8u, 8u);
+    var instanceIndex = input.instanceIndex;
+    let instanceSizeYZ = instanceSize.y * instanceSize.z;
+    let instanceX = instanceIndex / instanceSizeYZ;
+    let instanceY = (instanceIndex % instanceSizeYZ) / instanceSize.z;
+    let instanceZ = (instanceIndex % instanceSizeYZ) % instanceSize.z;
+
+    let width = 0.25;
+    let gap = 0.1;
+    let nearTopLeft = -(width + gap) * vec3<f32>(instanceSize) * 0.5 + vec3<f32>(width * 0.5);
+    let midNearFar = vec3<f32>(0.0, 0.0, -(view.near + (view.far - view.near) * 0.5));
+    // let midNearFar = vec3<f32>(0.0, 0.0, -(view.near + (view.far - view.near) * 0.5));
+    let translate = nearTopLeft + midNearFar + (width + gap) * vec3<f32>(f32(instanceX), f32(instanceY), f32(instanceZ));
+    // 输入是半径为32的球 缩放直径为1
+    let scale = vec3<f32>(width / 64.0);
+    var worldMatirx = mat4x4<f32>(
+        scale.x,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        scale.y,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        scale.z,
+        0.0,
+        translate.x,
+        translate.y,
+        translate.z,
+        1.0,
+    );
+
+    // 目前这个相机是indentity就没乘
+    let posView = worldMatirx * vec4<f32>(input.position, 1.0);
+    output.position = frustum.projection * posView;
+    // 因为没有加旋转,所以直接可用normal
+    output.normal = input.normal;
+    output.posNDC = output.position.xyz / output.position.w;
+    output.posView = posView.xyz;
+    output.color = vec4<f32>(1.0);
+
+    return output;
+}
+
+@fragment
+fn sphereFragment(vsOut: SphereOut) -> @location(0) vec4<f32> {
+    let clusterIndex = getClusterIndex(vsOut.posNDC, vsOut.posView.z, vsOut.position.z);
+    // return vec4<f32>(colors[clusterIndex % 6u], 1.0);
+    let lightOffset = clusterLights.lights[clusterIndex].offset;
+    let lightCount = clusterLights.lights[clusterIndex].count;
+    // if lightCount == 0u { discard; }
+
+    // let i = f32(lightCount) / 5.0;
+    // return vec4<f32>(i, i, i, 1.0);
+    // return vec4<f32>(colors[6u - lightCount], 0.5);
+    // return vsOut.color;
+
+    var radiance = vec3<f32>(0.0);
+    let normal = normalize(vsOut.normal);
+    for (var i = 0u; i < lightCount; i = i + 1u) {
+        let lightIndex = clusterIndices.indices[lightOffset + i];
+        // let lightIndex = 1u;
+        let light = globalLights.lights[lightIndex];
+        // 这里应该用posWorld只是相机在0.0, 所以posWorld 等于 posView
+        let pointToLight = vsOut.posView - light.position;
+        let lightDir = normalize(pointToLight);
+        let distance = length(pointToLight);
+        let NdotL = max(dot(normal, lightDir), 0.0);
+        let attenuation = rangeAttenuation(light.range, distance);
+        radiance = radiance + light.color * light.intensity * attenuation * NdotL;
+    }
+
+    return vsOut.color * vec4<f32>(radiance, 1.0);
+}
+
+fn rangeAttenuation(range: f32, distance: f32) -> f32 {
+    if range <= 0.0 {
+        // Negative range means no cutoff
+        return 1.0 / pow(distance, 2.0);
+    }
+    return clamp(1.0 - pow(distance / range, 4.0), 0.0, 1.0) / pow(distance, 2.0);
+}
+
+fn getClusterIndex(ndc: vec3<f32>, viewDepth: f32, screenDepth: f32) -> u32 {
+    var clusterId = vec3<u32>();
+    clusterId.x = u32(fma(ndc.x, 0.5, 0.5) * f32(frustum.clusterSize.x));
+    clusterId.y = u32(fma(ndc.y, 0.5, 0.5) * f32(frustum.clusterSize.y));
+
+    if frustum.depthSplitMethod == 0u {
+        // ndc space even
+        clusterId.z = u32(ndc.z * f32(frustum.clusterSize.z));
+    } else if frustum.depthSplitMethod == 1u {
+        // view space even
+        clusterId.z = u32(((-(viewDepth) - view.near) / (view.far - view.near)) * f32(frustum.clusterSize.z));
+    } else {
+        // doom-2018-siggraph
+        // TODO 外部计算一次传入即可
+        let sliceScale = f32(frustum.clusterSize.z) / log2(view.far / view.near);
+        let sliceBias = -(f32(frustum.clusterSize.z) * log2(view.near) / log2(view.far / view.near));
+        let linearDepth = view.far * view.near / fma(screenDepth, view.near - view.far, view.far);
+        clusterId.z = u32(max(log2(linearDepth) * sliceScale + sliceBias, 0.0));
+    }
+
+    // clusterId.x = 0u;
+    // clusterId.y = 0u;
+    // clusterId.z = 31u;
+
+    // z y x
+    // return clusterId.x + clusterId.y * frustum.clusterSize.x + clusterId.z * frustum.clusterSize.x * frustum.clusterSize.y;
+    // x y z
+    return clusterId.x * frustum.clusterSize.y * frustum.clusterSize.z + clusterId.y * frustum.clusterSize.z + clusterId.z;
 }
