@@ -1,8 +1,8 @@
 import { canvasCtx, canvasFormat, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
-import { createBuffer, degToRad, Demo, randomBetween, sleep } from './demo';
+import { createBuffer, degToRad, Demo, getRotateAxis, randomBetween, sleep } from './demo';
 import ClusterAllInOneCode from '../shaders/cluster.all-in-one.wgsl?raw';
-import { mat3, mat4, vec3, vec4 } from 'gl-matrix';
+import { mat3, mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { cubePrimitives } from '../assets/boxPrimitives';
 import * as BBO from 'buffer-backed-object';
 import { spherePrimitives } from '../assets/spherePrimitives';
@@ -124,7 +124,7 @@ export class DemoClusterForward implements Demo {
     computeClusterBounds: () => void;
     computeClusterLights: () => void;
   };
-  cpuJobs!: { drawFrustum: () => void };
+  cpuJobs!: { drawFrustum: () => void; updateLightPosition: () => void };
   bindGroupsCreator!: {
     frustum: () => GPUBindGroup;
     clusterBounds: () => GPUBindGroup;
@@ -153,11 +153,11 @@ export class DemoClusterForward implements Demo {
 
   initUI(refs: Refs, genOptions: GenOptions) {
     this.params = {
-      output: {
-        value: 'cluster-grid',
-        options: ['cluster-grid', 'cluster-depth', 'cluster-light', 'final'],
-        onChange: (v: string) => {},
-      },
+      // output: {
+      //   value: 'cluster-grid',
+      //   options: ['cluster-grid', 'cluster-depth', 'cluster-light', 'final'],
+      //   onChange: (v: string) => {},
+      // },
       clusterSize: {
         value: [32, 32, 32],
         range: [1, 32],
@@ -360,6 +360,8 @@ export class DemoClusterForward implements Demo {
               4 * 4 + lightSize * k + 4 * (3 + 1 + 3),
               1,
             ),
+            rotateAxis: vec3.create(),
+            rotateSpeed: randomBetween(0.5, 2.5),
           })),
         };
         view.lightCount[0] = lightCount;
@@ -376,12 +378,24 @@ export class DemoClusterForward implements Demo {
           light.intensity[0] = 1;
           light.range[0] = this.params.maxLightRange.value;
           // light.range[0] = -1;
+          const direction = vec3.fromValues(
+            randomBetween(0.1, 1),
+            randomBetween(0.1, 1),
+            randomBetween(0.1, 1),
+          );
+          vec3.normalize(direction, direction);
+          getRotateAxis(
+            light.rotateAxis,
+            [0, 0, -(near + zRange * 0.5)],
+            light.position,
+            direction,
+          );
         });
         view.lights[0].color.set([1, 0, 0]);
         view.lights[0].position.set([0, -1, -3.2]);
 
-        view.lights[1].color.set([0, 0, 1]);
-        view.lights[1].position.set([0, 1, -3.2]);
+        view.lights[1]?.color.set([0, 0, 1]);
+        view.lights[1]?.position.set([0, 1, -3.2]);
         console.log('globalLights', view);
 
         const gpuBuffer = createBuffer(
@@ -680,18 +694,19 @@ export class DemoClusterForward implements Demo {
     };
     this.cpuJobs = {
       drawFrustum: () => {
-        this.debugCameraXYPlaneDeg = (this.debugCameraXYPlaneDeg + 1) % 360;
         if (this.params.animateCamera.value) {
+          this.debugCameraXYPlaneDeg = (this.debugCameraXYPlaneDeg + 1) % 360;
           this.debugCameraPosition[0] =
             Math.cos(degToRad(this.debugCameraXYPlaneDeg)) * this.debugCameraXYPlaneRadius;
           this.debugCameraPosition[1] =
             Math.sin(degToRad(this.debugCameraXYPlaneDeg)) * this.debugCameraXYPlaneRadius;
           this.debugCameraPosition[2] = 4;
-        } else {
-          this.debugCameraPosition[0] = 0;
-          this.debugCameraPosition[1] = 0;
-          this.debugCameraPosition[2] = 4;
         }
+        //  else {
+        //   this.debugCameraPosition[0] = 0;
+        //   this.debugCameraPosition[1] = 0;
+        //   this.debugCameraPosition[2] = 4;
+        // }
         if (this.params.aerialView.value) {
           this.debugCameraPosition[0] = 0;
           this.debugCameraPosition[1] = 25;
@@ -699,6 +714,18 @@ export class DemoClusterForward implements Demo {
         }
         this.buffers.frustum.view.depthSplitMethod[0] =
           DepthSplitMethod[this.params.frustumDepth.value] || 0;
+      },
+      updateLightPosition: () => {
+        const q = quat.create();
+        this.buffers.globalLights.view.lights.forEach(light => {
+          quat.setAxisAngle(q, light.rotateAxis, degToRad(light.rotateSpeed));
+          vec3.transformQuat(light.position, light.position, q);
+        });
+        queue.writeBuffer(
+          this.buffers.globalLights.gpuBuffer,
+          0,
+          this.buffers.globalLights.cpuBuffer,
+        );
       },
     };
     this.gpuJobs = {
@@ -847,6 +874,7 @@ export class DemoClusterForward implements Demo {
 
     this.cpuJobs.drawFrustum();
     this.updateCamera();
+    this.cpuJobs.updateLightPosition();
     queue.writeBuffer(this.buffers.frustum.gpuBuffer, 0, this.buffers.frustum.cpuBuffer);
     queue.writeBuffer(this.buffers.view.gpuBuffer, 0, this.buffers.view.cpuBuffer);
 
@@ -1013,3 +1041,23 @@ function testNormalClipToView(demo: DemoClusterForward) {
   );
   console.log([...normal_clip_v3], [...normal_view_v3], [...normal_view_v3_90]);
 }
+
+// 重新理解四元数
+
+function testQuat() {
+  const p = vec3.fromValues(0, 0, 1);
+  const q = quat.create();
+  quat.setAxisAngle(q, [1, 0, 0], degToRad(90));
+  // quat.normalize(q, q);
+  vec3.transformQuat(p, p, q);
+
+  console.log('p', [...p]); // 0, -1, 0
+
+  quat.setAxisAngle(q, [1, 0, 0], degToRad(-90));
+  // quat.normalize(q, q);
+  vec3.transformQuat(p, p, q);
+
+  console.log('p', [...p]); // 0, 0, 1
+}
+
+testQuat();
