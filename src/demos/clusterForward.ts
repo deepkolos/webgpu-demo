@@ -228,6 +228,8 @@ export class DemoClusterForward implements Demo {
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     this.disposed = false;
     this.initUI(refs, genOptions);
+    this.clusterBoundsNeedUpdate = true;
+    this.printComputeResults = true;
 
     const shaderAllInOne = device.createShaderModule({ code: ClusterAllInOneCode });
     this.bindGroupLayouts = {
