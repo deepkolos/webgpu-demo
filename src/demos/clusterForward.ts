@@ -17,7 +17,8 @@ const colors = [
   [1, 1, 1],
 ];
 
-const BBOVec3 = BBO.NestedBufferBackedObject({
+// https://github.com/GoogleChromeLabs/buffer-backed-object/issues/37
+const BBOVec3 = () => BBO.NestedBufferBackedObject({
   x: BBO.Float32(),
   y: BBO.Float32(),
   z: BBO.Float32(),
@@ -338,13 +339,13 @@ export class DemoClusterForward implements Demo {
         const zRange = far - near;
         const lightCount = this.params.lightNum.value;
         const lightDesc = {
-          position: BBOVec3,
+          position: BBOVec3(),
           range: BBO.Float32(),
-          color: BBOVec3,
+          color: BBOVec3(),
           intensity: BBO.Float32(),
         };
         const structDesc = {
-          ambient: BBOVec3,
+          ambient: BBOVec3(),
           lightCount: BBO.Uint32(),
           lights: BBO.NestedArrayOfBufferBackedObjects(lightCount, lightDesc),
         };
@@ -988,18 +989,13 @@ for (let i = 0; i < gridSize[0] * gridSize[1] * gridSize[2]; i++) {
 
 {
   // BBO 有bug...
-  const BBOVec3 = BBO.NestedBufferBackedObject({
-    x: BBO.Float32(),
-    y: BBO.Float32(),
-    z: BBO.Float32(),
-  });
   const structDesc = {
-    ambient: BBOVec3,
+    ambient: BBOVec3(),
     lightCount: BBO.Float32(),
     lights: BBO.NestedArrayOfBufferBackedObjects(1, {
-      position: BBOVec3,
+      position: BBOVec3(),
       range: BBO.Float32(),
-      color: BBOVec3,
+      color: BBOVec3(),
       intensity: BBO.Float32(),
     }),
   };
