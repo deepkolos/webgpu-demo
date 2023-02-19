@@ -181,6 +181,7 @@ export class DemoBitonicSorter implements Demo {
     const info = document.createElement('pre');
     info.style.fontSize = '14px';
     refs.listOption.append(info);
+    info.classList.add('opt-can');
     this.infoNode = info;
   }
 
@@ -387,7 +388,7 @@ export class DemoBitonicSorter implements Demo {
     const endT = performance.now();
     console.log('output', sorted);
     const BMSCost =
-      `BMS GPU ${this.renderDispatch ? '+ Render ' : ''}` +
+      `BMS GPU${this.renderDispatch ? '+Render' : ''}:` + '\n ' +
       performance.measure('BMS Compute', { start: startT, end: endT }).duration.toFixed(2) +
       'ms';
     console.log(BMSCost);
@@ -396,7 +397,7 @@ export class DemoBitonicSorter implements Demo {
     if (this.listLen <= Math.pow(2, 23)) {
       this.listData.sort((a, b) => a - b);
       JSSortCost =
-        'JS Sort ' +
+        'JS Sort:\n ' +
         performance
           .measure('JS Sort', { start: endT, end: performance.now() })
           .duration.toFixed(2) +
