@@ -4,21 +4,23 @@ import { Demo, loadImageBitmap } from './demo';
 import vertShaderCode from '../shaders/triangle-texture.vert.wgsl?raw';
 import fragShaderCode from '../shaders/triangle-texture.frag.wgsl?raw';
 // import { tail1Img } from '../assets/tail-img';
-import logoImg from '../assets/douyin-logo-white.png';
+import logoImg from '../assets/webgpu-logo.png';
 
 // prettier-ignore
 const positions = new Float32Array([
   1.0, -1.0, 0.0, // bottom-right
   -1.0, -1.0, 0.0, // bottom-left
   -1.0, 1.0, 0.0, // top-left
+  1.0, 1.0, 0.0, // top-right
 ]);
 // prettier-ignore
 const uvs = new Float32Array([
   1.0, 0.0,
   0.0, 0.0,
   0.0, 1.0,
+  1.0, 1.0,
 ]);
-const indices = new Uint16Array([0, 1, 2]);
+const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 const uniformData = new Float32Array([
   // ♟️ ModelViewProjection Matrix (Identity)
   1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -30,7 +32,7 @@ const uniformData = new Float32Array([
 
 export class DemoTriangleAntialias implements Demo {
   name = 'TriangleAntialias';
-  preview = '';
+  preview = logoImg;
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
   bindGroup!: GPUBindGroup;
@@ -80,9 +82,9 @@ export class DemoTriangleAntialias implements Demo {
             format: 'bgra8unorm',
             blend: {
               color: {
-                operation: 'add',
-                srcFactor: 'src-alpha',
-                dstFactor: 'dst-alpha',
+                // operation: 'add',
+                // srcFactor: 'src-alpha',
+                // dstFactor: 'dst-alpha',
               },
               alpha: {
                 // operation: 'add',
@@ -151,8 +153,8 @@ export class DemoTriangleAntialias implements Demo {
     });
     const colorTextureView = colorTexture.createView();
     const colorTextureSampler = device.createSampler({
-      minFilter: 'nearest',
-      magFilter: 'nearest',
+      minFilter: 'linear',
+      magFilter: 'linear',
     });
 
     // 这个是同步还是异步方法?
@@ -247,7 +249,7 @@ export class DemoTriangleAntialias implements Demo {
     passEncoder.setIndexBuffer(this.buffers.indexBuffer, 'uint16');
     passEncoder.setViewport(0, 0, w, h, 0, 1);
     passEncoder.setScissorRect(0, 0, w, h);
-    passEncoder.drawIndexed(3, 1);
+    passEncoder.drawIndexed(6, 1);
 
     passEncoder.end();
     queue.submit([commanderEncoder.finish()]);

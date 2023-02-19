@@ -6,6 +6,7 @@ import { Demo } from './demo';
 import BMSComputeShader from '../shaders/bms.compute.wgsl?raw';
 import BMSVertShader from '../shaders/bms.vert.wgsl?raw';
 import BMSFragShader from '../shaders/bms.frag.wgsl?raw';
+import preview from '../assets/screenshots/bitonic-sort.png';
 
 enum Kernel {
   local_bms = 0,
@@ -18,7 +19,7 @@ enum Kernel {
  */
 export class DemoBitonicSorter implements Demo {
   name = 'BitonicSorter';
-  preview = '';
+  preview = preview;
   bindGroup!: GPUBindGroup;
   pipeline!: GPUComputePipeline;
   buffers!: { listBuffer: GPUBuffer; listStagingBuffer: GPUBuffer; uniformBuffer: GPUBuffer };

@@ -8,7 +8,6 @@ import { DemoTriangleRotating } from './demos/triangleRotating';
 import { DemoMeshline } from './demos/meshline';
 import { DemoBitonicSorter } from './demos/bitonicSorter';
 import { DemoClusterForward } from './demos/clusterForward';
-import { slice } from 'lodash-es';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,

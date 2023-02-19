@@ -6,6 +6,7 @@ import { mat3, mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { cubePrimitives } from '../assets/boxPrimitives';
 import * as BBO from 'buffer-backed-object';
 import { spherePrimitives } from '../assets/spherePrimitives';
+import preview from '../assets/screenshots/clusterforward.png'
 
 const colors = [
   [1, 0, 0],
@@ -47,7 +48,7 @@ type Params = {
 
 export class DemoClusterForward implements Demo {
   name = 'ClusterForward';
-  preview = '';
+  preview = preview;
 
   renderFrustum = true;
   renderFinal = true;

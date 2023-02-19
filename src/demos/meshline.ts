@@ -9,14 +9,14 @@ import { vFov2hFov } from '../objects/math-utils';
 import { mat4 } from '../objects/matrix4';
 // import { tail1Img } from '../assets/tail-img';
 import tail1Img from '../assets/tail.png';
-// import tail1Img from '../assets/douyin-logo-white.png';
+import preview from '../assets/screenshots/meshline.png';
 
 const lineLength = cfg.frameCount + cfg.fadeFrameCount;
 const lineNumber = cfg.count;
 
 export class DemoMeshline implements Demo {
   name = 'Meshline';
-  preview = '';
+  preview = preview;
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
   bindGroup!: GPUBindGroup;

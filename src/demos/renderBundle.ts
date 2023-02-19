@@ -3,6 +3,7 @@ import { GenOptions, Refs } from '../ui';
 import { Demo } from './demo';
 import vertShaderCode from '../shaders/triangle.vert.wgsl?raw';
 import fragShaderCode from '../shaders/triangle.frag.wgsl?raw';
+import preview from '../assets/screenshots/renderbundle.png';
 
 // prettier-ignore
 const positions = new Float32Array([
@@ -28,7 +29,7 @@ const uniformData = new Float32Array([
 
 export class DemoRenderBundle implements Demo {
   name = 'RenderBundle';
-  preview = '';
+  preview = preview;
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
   bindGroup!: GPUBindGroup;
