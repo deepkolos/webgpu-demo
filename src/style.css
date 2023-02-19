@@ -118,6 +118,16 @@ a {
   }
 }
 @media screen and (max-width: 800px) and (min-width: 450px) {
+  .plane.left {
+    flex-grow: 0;
+  }
+  .plane.middle {
+    flex-grow: 1;
+  }
+  .plane.right {
+    flex-grow: 0;
+    flex-shrink: 1;
+  }
 }
 @media screen and (max-width: 450px) {
   .plane.left {
