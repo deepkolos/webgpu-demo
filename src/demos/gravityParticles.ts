@@ -2,12 +2,13 @@ import { mat4 } from 'gl-matrix';
 import { canvasCtx, canvasFormat, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
 import { createBuffer, Demo, randomBetween } from './demo';
+import preview from '../assets/screenshots/gravity-particles.png';
 
 const DEPTH_FORMAT = 'depth24plus';
 
 export class DemoGravityParticles implements Demo {
   name = 'GravityParticles';
-  preview = '';
+  preview = preview;
 
   disposed = false;
   // prettier-ignore
@@ -185,11 +186,9 @@ export class DemoGravityParticles implements Demo {
       }));
 
       view.forEach(particle => {
-        particle.position.set([
-          randomBetween(-10, 10),
-          randomBetween(-10, 10),
-          randomBetween(-10, 10),
-        ]);
+        particle.position.set(
+          [randomBetween(-10, 10), randomBetween(-10, 10), randomBetween(-10, 10)].map(i => i * 1),
+        );
         particle.velocity.set(
           [randomBetween(-10, 10), randomBetween(-10, 10), randomBetween(-10, 10)].map(i => i / 6),
         );
@@ -216,11 +215,9 @@ export class DemoGravityParticles implements Demo {
       }));
 
       view.forEach(particle => {
-        particle.position.set([
-          randomBetween(-10, 10),
-          randomBetween(-10, 10),
-          randomBetween(-10, 10),
-        ]);
+        particle.position.set(
+          [randomBetween(-10, 10), randomBetween(-10, 10), randomBetween(-10, 10)].map(i => i * 2),
+        );
         particle.velocity.set([
           randomBetween(-10, 10),
           randomBetween(-10, 10),
