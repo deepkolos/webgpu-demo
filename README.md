@@ -9,4 +9,4 @@ WebGPU 学习 Demos
 - [Meshline](./src/demos/meshline.ts)
 - [BitonicSorter](./src/demos/bitonicSorter.ts)
 - [ClusterForward](./src/demos/clusterForward.ts)
-- [ParticleSystem(planning)](./src/demos/particleSystem.ts)
+- [GravityParticles](./src/demos/gravityParticles.ts)

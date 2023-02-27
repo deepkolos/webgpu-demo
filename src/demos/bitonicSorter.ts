@@ -141,7 +141,7 @@ export class DemoBitonicSorter implements Demo {
     };
     canvasCtx.configure(canvasConfig);
 
-    this.opts = { invocation: 2, dataSize: 4 };
+    this.opts = { invocation: 8, dataSize: 20 };
 
     this.initUI(refs, genOptions);
     this.inited = true;

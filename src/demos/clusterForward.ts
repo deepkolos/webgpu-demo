@@ -937,6 +937,7 @@ export class DemoClusterForward implements Demo {
 
   dispose(): void {
     this.disposed = true;
+    // TODO dispose GPU resources
   }
 }
 

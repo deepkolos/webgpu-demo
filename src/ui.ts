@@ -8,6 +8,7 @@ import { DemoTriangleRotating } from './demos/triangleRotating';
 import { DemoMeshline } from './demos/meshline';
 import { DemoBitonicSorter } from './demos/bitonicSorter';
 import { DemoClusterForward } from './demos/clusterForward';
+import { DemoGravityParticles } from './demos/gravityParticles';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -32,6 +33,7 @@ const demos: Array<Demo> = [
   new DemoMeshline(),
   new DemoBitonicSorter(),
   new DemoClusterForward(),
+  new DemoGravityParticles(),
 ];
 
 // init demo list
@@ -210,7 +212,9 @@ initContext(refs)
       const urlParams = new URLSearchParams(location.hash ? location.hash.slice(1) : '');
       const demoName = urlParams.get('demo');
       const demoIndex = demos.findIndex(i => i.name == demoName);
-      refs.demos[demoIndex === -1 ? 0 : demoIndex].click();
+      const demo = refs.demos[demoIndex === -1 ? 0 : demoIndex];
+      demo.click();
+      demo.scrollIntoView();
       if (demoName) document.title = `${demoName} WebGPU Demo`;
     } catch (error) {
       console.error(error);
