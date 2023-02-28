@@ -30,8 +30,35 @@ export class DemoGravityParticles implements Demo {
   // prettier-ignore
   pipelines!: { drawParticle: GPURenderPipeline; drawGravityParticles: GPURenderPipeline; updateParticles: GPUComputePipeline; updateGravityParticles: GPUComputePipeline; blendTail: GPURenderPipeline; drawQuad: GPURenderPipeline; };
   lastSubmitWorkDonePromise?: Promise<undefined>;
+  params!: {
+    particleNum: { value: number; range: Vec2; onChange: () => void };
+    gravityNum: { value: number; range: Vec2; onChange: () => void };
+  };
+
+  initUI(refs: Refs, genOptions: GenOptions) {
+    this.params = {
+      particleNum: {
+        value: 2,
+        range: [1, 1000] as Vec2,
+        onChange: () => {
+          this.buffers.particles = this.bufferCreator.particles();
+          this.bindGroups.compute = this.bindGroupsCreator.compute();
+        },
+      },
+      gravityNum: {
+        value: 1,
+        range: [1, 10] as Vec2,
+        onChange: () => {
+          this.buffers.gravityParticles = this.bufferCreator.gravityParticles();
+          this.bindGroups.compute = this.bindGroupsCreator.compute();
+        },
+      },
+    };
+    genOptions(this.params);
+  }
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
+    this.initUI(refs, genOptions);
     this.nearstSampler = device.createSampler({
       minFilter: 'nearest',
       magFilter: 'nearest',
@@ -256,7 +283,7 @@ export class DemoGravityParticles implements Demo {
       return { cpuBuffer, gpuBuffer, view };
     },
     particles: () => {
-      const length = 1000;
+      const length = this.params.particleNum.value;
       const stride = (4 + 4) * 4;
       const cpuBuffer = new Uint8Array(length * stride);
       const view = new Array(length).fill(0).map((v, k) => ({
@@ -280,10 +307,7 @@ export class DemoGravityParticles implements Demo {
       return { cpuBuffer, gpuBuffer, view };
     },
     gravityParticles: () => {
-      // vertex buffer 有最小值限制, 最小值172
-      // 但是为了利用runtime size, 也导致不好增加额外的padding
-      // 增加padding后runtimesize返回就不对了...真的难搞...
-      const length = 6;
+      const length = this.params.gravityNum.value;
       const stride = (4 + 4) * 4;
       const cpuBuffer = new Uint8Array(stride * length);
       const view = new Array(length).fill(0).map((v, k) => ({
@@ -361,7 +385,7 @@ export class DemoGravityParticles implements Demo {
         passEncoder.setPipeline(this.pipelines.drawParticle);
         passEncoder.setVertexBuffer(0, this.buffers.particles.gpuBuffer);
         passEncoder.setBindGroup(0, this.bindGroups.frame);
-        passEncoder.draw(6, 20);
+        passEncoder.draw(6, this.params.particleNum.value);
         passEncoder.end();
       }
 
@@ -402,7 +426,7 @@ export class DemoGravityParticles implements Demo {
       encoder.setPipeline(this.pipelines.drawGravityParticles);
       encoder.setBindGroup(0, this.bindGroups.frame);
       encoder.setVertexBuffer(0, this.buffers.gravityParticles.gpuBuffer);
-      encoder.draw(6, 6);
+      encoder.draw(6, this.params.gravityNum.value);
 
       encoder.end();
     },
@@ -410,7 +434,7 @@ export class DemoGravityParticles implements Demo {
       const passEncoder = encoder.beginComputePass();
       passEncoder.setPipeline(this.pipelines.updateParticles);
       passEncoder.setBindGroup(0, this.bindGroups.compute);
-      passEncoder.dispatchWorkgroups(Math.ceil(100 / 32));
+      passEncoder.dispatchWorkgroups(Math.ceil(this.params.particleNum.value / 32));
 
       // passEncoder.setPipeline(this.pipelines.updateGravityParticles);
       // passEncoder.setBindGroup(0, this.bindGroups.compute);

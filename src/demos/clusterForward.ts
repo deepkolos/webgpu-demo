@@ -34,7 +34,7 @@ const DepthSplitMethod: { [k: string]: number } = {
 };
 
 type Params = {
-  output: { value: string; options: string[]; onChange: (v: string) => void };
+  // output: { value: string; options: string[]; onChange: (v: string) => void };
   clusterSize: { value: Vec3; range: Vec2; onChange: (v: Vec3) => void };
   lightNum: { value: number; range: Vec2; onChange: (v: number) => void };
   maxLightRange: { value: number; range: Vec2; step: number; onChange: (v: number) => void };
