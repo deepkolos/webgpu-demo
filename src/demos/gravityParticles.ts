@@ -38,7 +38,7 @@ export class DemoGravityParticles implements Demo {
   initUI(refs: Refs, genOptions: GenOptions) {
     this.params = {
       particleNum: {
-        value: 2,
+        value: 20,
         range: [1, 1000] as Vec2,
         onChange: () => {
           this.buffers.particles = this.bufferCreator.particles();
@@ -46,7 +46,7 @@ export class DemoGravityParticles implements Demo {
         },
       },
       gravityNum: {
-        value: 1,
+        value: 2,
         range: [1, 10] as Vec2,
         onChange: () => {
           this.buffers.gravityParticles = this.bufferCreator.gravityParticles();
@@ -421,7 +421,7 @@ export class DemoGravityParticles implements Demo {
       // encoder.setPipeline(this.pipelines.drawParticle);
       // encoder.setBindGroup(0, this.bindGroups.frame);
       // encoder.setVertexBuffer(0, this.buffers.particles.gpuBuffer);
-      // encoder.draw(6, 20);
+      // encoder.draw(6, this.params.particleNum.value);
 
       encoder.setPipeline(this.pipelines.drawGravityParticles);
       encoder.setBindGroup(0, this.bindGroups.frame);
@@ -646,10 +646,11 @@ namespace WGSL {
     @fragment
     fn fragBlend(input: VsOut) -> @location(0) vec4<f32> {
       let currColor = textureSample(currFrame, textureSampler, input.uv);
-      let lastColor = textureSample(lastFrame, textureSampler, input.uv);
+      let lastColor = textureSample(lastFrame, textureSampler, vec2<f32>(input.uv.x, 1.0 - input.uv.y));
       // 然后需要混合 实现的效果为canvas的globalAlpha
       // 应该是lastColor 颜色是0.2, 然后当前current直接叠加即可, 
       // 那么也只是相当于修改了lastFrame的alpha然后进行正常的混合
+      // 修正uv之后拖尾的采样率增加一倍, 显得非常细腻
       let blendColor = 0.75 * lastColor.rgb + currColor.rgb;
       // 能有轨迹的效果了,但是速度快的时候会导致采样不足,会导致间隙
       // 所以canvas的做法是绘制一个连线, 从上一个位置连到当前位置
