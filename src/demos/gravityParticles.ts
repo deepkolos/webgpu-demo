@@ -29,6 +29,7 @@ export class DemoGravityParticles implements Demo {
   };
   // prettier-ignore
   pipelines!: { drawParticle: GPURenderPipeline; drawGravityParticles: GPURenderPipeline; updateParticles: GPUComputePipeline; updateGravityParticles: GPUComputePipeline; blendTail: GPURenderPipeline; drawQuad: GPURenderPipeline; };
+  lastSubmitWorkDonePromise?: Promise<undefined>;
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     this.nearstSampler = device.createSampler({
@@ -178,7 +179,15 @@ export class DemoGravityParticles implements Demo {
     setTimeout(this.render, 10);
   }
 
-  resize(): void {
+  async resize() {
+    const textures = [
+      this.depthTexture,
+      this.currFBO?.texture,
+      this.swapFBO?.[0]?.texture,
+      this.swapFBO?.[1]?.texture,
+    ];
+    await this.lastSubmitWorkDonePromise;
+    textures.forEach(i => i?.destroy());
     const w = canvasCtx.canvas.width;
     const h = canvasCtx.canvas.height;
     this.depthTexture = device.createTexture({
@@ -206,8 +215,17 @@ export class DemoGravityParticles implements Demo {
     this.swapLast = 0;
   }
 
-  dispose(): void {
+  async dispose() {
     this.disposed = true;
+
+    const textures = [
+      this.depthTexture,
+      this.currFBO.texture,
+      this.swapFBO[0].texture,
+      this.swapFBO[1].texture,
+    ];
+    await this.lastSubmitWorkDonePromise;
+    textures.forEach(i => i?.destroy());
     // TODO dispose GPU resources
   }
 
@@ -251,7 +269,7 @@ export class DemoGravityParticles implements Demo {
           [randomBetween(-10, 10), randomBetween(-10, 10), randomBetween(-10, 10)].map(i => i * 1),
         );
         particle.velocity.set(
-          [randomBetween(-10, 10), randomBetween(-10, 10), randomBetween(-10, 10)].map(i => i / 6),
+          [randomBetween(-10, 10), randomBetween(-10, 10), randomBetween(-10, 10)].map(i => i / 12),
         );
       });
       const gpuBuffer = createBuffer(
@@ -284,7 +302,7 @@ export class DemoGravityParticles implements Demo {
           randomBetween(-10, 10),
           randomBetween(-10, 10),
         ]);
-        particle.gravity[0] = randomBetween(1, 10) / 300;
+        particle.gravity[0] = randomBetween(1, 10) / 600;
         particle.radius[0] = randomBetween(1, 10) / 300;
       });
       const gpuBuffer = createBuffer(
@@ -447,8 +465,9 @@ export class DemoGravityParticles implements Demo {
 
     queue.submit([commandEncoder.finish()]);
 
+    this.lastSubmitWorkDonePromise = queue.onSubmittedWorkDone();
     requestAnimationFrame(this.render);
-    // setTimeout(this.render, 100);
+    // setTimeout(this.render, 1000);
   };
 }
 
