@@ -592,7 +592,7 @@ namespace WGSL {
     fn main(input: VsIn) -> VsOut {
       var output: VsOut;
       let localPosition = vec3<f32>(spritePosition[input.vertexId], 0.0);
-      let worldPosition = localPosition + input.translate;  
+      let worldPosition = localPosition * 2.5 + input.translate;  
       output.position = frame.projection * frame.modelView * vec4<f32>(worldPosition, 1.0);
       output.uv = localPosition.xy * 0.5 + 0.5;
       return output;
@@ -604,8 +604,11 @@ namespace WGSL {
 
     @fragment
     fn fsParticle(input: VsOut) -> @location(0) vec4<f32> {
-      let dist = distance(input.uv, vec2<f32>(0.5, 0.5));
-      let alpha = 1.0 - smoothstep(0.45, 0.5, dist);
+      let center = vec2<f32>(0.5, 0.5);
+      let dist = distance(input.uv, center);
+      let dir = normalize(input.uv - center);
+      let offset = 0.03 * cos(acos(dot(dir, vec2<f32>(1, 0))) * 8.0);
+      let alpha = 1.0 - smoothstep(0.25 + offset, 0.45 + offset, dist);
       return vec4<f32>(1.0, 1.0, 1.0, alpha);
     }
 
@@ -650,8 +653,8 @@ namespace WGSL {
       // 然后需要混合 实现的效果为canvas的globalAlpha
       // 应该是lastColor 颜色是0.2, 然后当前current直接叠加即可, 
       // 那么也只是相当于修改了lastFrame的alpha然后进行正常的混合
-      // 修正uv之后拖尾的采样率增加一倍, 显得非常细腻
-      let blendColor = 0.75 * lastColor.rgb + currColor.rgb;
+      // 修正uv之后拖尾的采样率增加一倍, 显得非常细腻, 但是截图还是有点问题
+      let blendColor = 0.75 * lastColor.rgb * lastColor.a + currColor.rgb * currColor.a;
       // 能有轨迹的效果了,但是速度快的时候会导致采样不足,会导致间隙
       // 所以canvas的做法是绘制一个连线, 从上一个位置连到当前位置
       return vec4<f32>(blendColor, 1.0);
