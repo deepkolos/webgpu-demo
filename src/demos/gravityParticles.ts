@@ -14,19 +14,27 @@ export class DemoGravityParticles implements Demo {
   // prettier-ignore
   buffers!: { frame: { cpuBuffer: Float32Array; gpuBuffer: GPUBuffer; view: { modelView: Float32Array; projection: Float32Array; }; }; particles: { cpuBuffer: Uint8Array; gpuBuffer: GPUBuffer; view: { position: Float32Array; velocity: Float32Array; }[]; }; gravityParticles: { cpuBuffer: Uint8Array; gpuBuffer: GPUBuffer; view: { position: Float32Array; gravity: Float32Array; velocity: Float32Array; radius: Float32Array; }[]; }; };
   // prettier-ignore
-  bindGroupLayouts!: { frame: GPUBindGroupLayout; compute: GPUBindGroupLayout; };
-  // prettier-ignore
-  bindGroups!: { frame: GPUBindGroup; compute: GPUBindGroup; };
-  pipelines!: {
-    drawParticle: GPURenderPipeline;
-    drawGravityParticles: GPURenderPipeline;
-    updateParticles: GPUComputePipeline;
-    updateGravityParticles: GPUComputePipeline;
-  };
   depthTexture!: GPUTexture;
   depthTextureView!: GPUTextureView;
+  currFBO!: { texture: GPUTexture; view: GPUTextureView };
+  swapFBO!: { texture: GPUTexture; view: GPUTextureView }[];
+  swapLast!: number;
+  nearstSampler!: GPUSampler;
+  // prettier-ignore
+  bindGroupLayouts!: { frame: GPUBindGroupLayout; compute: GPUBindGroupLayout; blendTail: GPUBindGroupLayout; quad: GPUBindGroupLayout; };
+  // prettier-ignore
+  bindGroups!: {
+    frame: GPUBindGroup; compute: GPUBindGroup; blendTail: GPUBindGroup; // resize时赋值
+    quad: GPUBindGroup;
+  };
+  // prettier-ignore
+  pipelines!: { drawParticle: GPURenderPipeline; drawGravityParticles: GPURenderPipeline; updateParticles: GPUComputePipeline; updateGravityParticles: GPUComputePipeline; blendTail: GPURenderPipeline; drawQuad: GPURenderPipeline; };
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
+    this.nearstSampler = device.createSampler({
+      minFilter: 'nearest',
+      magFilter: 'nearest',
+    });
     this.bindGroupLayouts = {
       frame: device.createBindGroupLayout({
         entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
@@ -35,6 +43,19 @@ export class DemoGravityParticles implements Demo {
         entries: [
           { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
           { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+      }),
+      blendTail: device.createBindGroupLayout({
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+          { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        ],
+      }),
+      quad: device.createBindGroupLayout({
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
         ],
       }),
     };
@@ -46,10 +67,13 @@ export class DemoGravityParticles implements Demo {
     this.bindGroups = {
       frame: this.bindGroupsCreator.frame(),
       compute: this.bindGroupsCreator.compute(),
+      blendTail: undefined as unknown as GPUBindGroup, // resize时赋值
+      quad: undefined as unknown as GPUBindGroup, // resize时赋值
     };
     const csm = device.createShaderModule({ code: WGSL.compute, label: 'cs' });
     const vsm = device.createShaderModule({ code: WGSL.vs, label: 'vs' });
     const fsm = device.createShaderModule({ code: WGSL.fs, label: 'fs' });
+    const quad = device.createShaderModule({ code: WGSL.quad, label: 'quad' });
     this.pipelines = {
       drawParticle: device.createRenderPipeline({
         layout: device.createPipelineLayout({
@@ -130,11 +154,27 @@ export class DemoGravityParticles implements Demo {
           entryPoint: 'updateGravityParticles',
         },
       }),
+
+      blendTail: device.createRenderPipeline({
+        layout: device.createPipelineLayout({
+          bindGroupLayouts: [this.bindGroupLayouts.blendTail],
+        }),
+        vertex: { module: quad, entryPoint: 'vert' },
+        fragment: { module: quad, entryPoint: 'fragBlend', targets: [{ format: canvasFormat }] },
+        depthStencil: { format: DEPTH_FORMAT },
+      }),
+      drawQuad: device.createRenderPipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayouts.quad] }),
+        vertex: { module: quad, entryPoint: 'vert' },
+        fragment: { module: quad, entryPoint: 'frag', targets: [{ format: canvasFormat }] },
+        depthStencil: { format: DEPTH_FORMAT },
+      }),
     };
 
     canvasCtx.configure({ device, format: canvasFormat, alphaMode: 'opaque' });
 
     this.disposed = false;
+    this.camera.needsUpdate = true;
     setTimeout(this.render, 10);
   }
 
@@ -148,6 +188,22 @@ export class DemoGravityParticles implements Demo {
       dimension: '2d',
     });
     this.depthTextureView = this.depthTexture.createView();
+    this.camera.needsUpdate = true;
+
+    const createTexure = () => {
+      const texture = device.createTexture({
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+        format: canvasFormat,
+        size: [w, h, 1],
+        dimension: '2d',
+      });
+      const view = texture.createView();
+      return { texture, view };
+    };
+
+    this.currFBO = createTexure();
+    this.swapFBO = [createTexure(), createTexure()];
+    this.swapLast = 0;
   }
 
   dispose(): void {
@@ -155,11 +211,16 @@ export class DemoGravityParticles implements Demo {
     // TODO dispose GPU resources
   }
 
+  get swapNext() {
+    return (this.swapLast + 1) % 2;
+  }
+
   camera = {
     fov: 45,
     near: 1,
     far: 1000,
     position: [0, 0, 100] as Vec3,
+    needsUpdate: true,
   };
 
   bufferCreator = {
@@ -248,14 +309,77 @@ export class DemoGravityParticles implements Demo {
           { binding: 1, resource: { buffer: this.buffers.gravityParticles.gpuBuffer } },
         ],
       }),
+    blendTail: () =>
+      device.createBindGroup({
+        layout: this.bindGroupLayouts.blendTail,
+        entries: [
+          { binding: 0, resource: this.nearstSampler },
+          { binding: 1, resource: this.swapFBO[this.swapLast].view },
+          { binding: 2, resource: this.currFBO.view },
+        ],
+      }),
+    quad: () =>
+      device.createBindGroup({
+        layout: this.bindGroupLayouts.quad,
+        entries: [
+          { binding: 0, resource: this.nearstSampler },
+          { binding: 1, resource: this.swapFBO[this.swapNext].view },
+        ],
+      }),
   };
 
   gpuJobs = {
+    drawTail: (commandEncoder: GPUCommandEncoder) => {
+      {
+        const passEncoder = commandEncoder.beginRenderPass({
+          colorAttachments: [{ view: this.currFBO.view, loadOp: 'clear', storeOp: 'store' }],
+          depthStencilAttachment: {
+            view: this.depthTextureView,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'discard',
+          },
+        });
+
+        passEncoder.setPipeline(this.pipelines.drawParticle);
+        passEncoder.setVertexBuffer(0, this.buffers.particles.gpuBuffer);
+        passEncoder.setBindGroup(0, this.bindGroups.frame);
+        passEncoder.draw(6, 20);
+        passEncoder.end();
+      }
+
+      // custom blend next = currFBO + last
+      {
+        this.bindGroups.blendTail = this.bindGroupsCreator.blendTail();
+        this.bindGroups.quad = this.bindGroupsCreator.quad();
+        const passEncoder = commandEncoder.beginRenderPass({
+          colorAttachments: [
+            {
+              view: this.swapFBO[this.swapNext].view,
+              loadOp: 'load',
+              storeOp: 'store',
+            },
+          ],
+          depthStencilAttachment: {
+            view: this.depthTextureView,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'discard',
+          },
+        });
+        passEncoder.setPipeline(this.pipelines.blendTail);
+        passEncoder.setBindGroup(0, this.bindGroups.blendTail);
+        passEncoder.draw(6);
+        passEncoder.end();
+        this.swapLast = this.swapNext;
+      }
+    },
     draw: (encoder: GPURenderPassEncoder) => {
-      encoder.setPipeline(this.pipelines.drawParticle);
-      encoder.setBindGroup(0, this.bindGroups.frame);
-      encoder.setVertexBuffer(0, this.buffers.particles.gpuBuffer);
-      encoder.draw(6, 20);
+      encoder.setPipeline(this.pipelines.drawQuad);
+      encoder.setBindGroup(0, this.bindGroups.quad);
+      encoder.draw(6);
+      // encoder.setPipeline(this.pipelines.drawParticle);
+      // encoder.setBindGroup(0, this.bindGroups.frame);
+      // encoder.setVertexBuffer(0, this.buffers.particles.gpuBuffer);
+      // encoder.draw(6, 20);
 
       encoder.setPipeline(this.pipelines.drawGravityParticles);
       encoder.setBindGroup(0, this.bindGroups.frame);
@@ -282,23 +406,28 @@ export class DemoGravityParticles implements Demo {
     if (this.disposed) return;
 
     // 更新相机参数
-    const w = canvasCtx.canvas.width;
-    const h = canvasCtx.canvas.height;
-    mat4.perspectiveZO(
-      this.buffers.frame.view.projection,
-      this.camera.fov,
-      w / h,
-      this.camera.near,
-      this.camera.far,
-    );
-    mat4.fromTranslation(this.buffers.frame.view.modelView, this.camera.position);
-    mat4.invert(this.buffers.frame.view.modelView, this.buffers.frame.view.modelView);
-    queue.writeBuffer(this.buffers.frame.gpuBuffer, 0, this.buffers.frame.cpuBuffer);
+    if (this.camera.needsUpdate) {
+      const w = canvasCtx.canvas.width;
+      const h = canvasCtx.canvas.height;
+      mat4.perspectiveZO(
+        this.buffers.frame.view.projection,
+        this.camera.fov,
+        w / h,
+        this.camera.near,
+        this.camera.far,
+      );
+      mat4.fromTranslation(this.buffers.frame.view.modelView, this.camera.position);
+      mat4.invert(this.buffers.frame.view.modelView, this.buffers.frame.view.modelView);
+      queue.writeBuffer(this.buffers.frame.gpuBuffer, 0, this.buffers.frame.cpuBuffer);
+      this.camera.needsUpdate = false;
+    }
 
     const commandEncoder = device.createCommandEncoder();
     // 开启了renderpass, 但未end, 是否能开启新的compute pass
     // 答案: 否
     this.gpuJobs.simulate(commandEncoder);
+
+    this.gpuJobs.drawTail(commandEncoder);
 
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -314,12 +443,12 @@ export class DemoGravityParticles implements Demo {
         depthStoreOp: 'store',
       },
     });
-
     this.gpuJobs.draw(passEncoder);
 
     queue.submit([commandEncoder.finish()]);
 
     requestAnimationFrame(this.render);
+    // setTimeout(this.render, 100);
   };
 }
 
@@ -442,6 +571,51 @@ namespace WGSL {
       let dist = distance(input.uv, vec2<f32>(0.5, 0.5));
       let alpha = 1.0 - smoothstep(0.45, 0.5, dist);
       return vec4<f32>(1.0, 0.0, 1.0, alpha);
+    }
+  `;
+
+  export const quad = /* wgsl */ `
+    ${vsInOutStruct}
+
+    @group(0) @binding(0) var textureSampler: sampler;
+    @group(0) @binding(1) var lastFrame: texture_2d<f32>;
+    @group(0) @binding(2) var currFrame: texture_2d<f32>;
+
+    var<private> spritePosition = array<vec2<f32>, 6>(
+      vec2<f32>(-1.0, -1.0), // left bottom
+      vec2<f32>(-1.0, 1.0),  // left top
+      vec2<f32>(1.0, 1.0),   // right bottom
+      vec2<f32>(-1.0, -1.0), // left bottom
+      vec2<f32>(1.0, 1.0),   // right top
+      vec2<f32>(1.0, -1.0),  // right bottom
+    );
+
+    @vertex
+    fn vert(@builtin(vertex_index) vertexId: u32,
+            @builtin(instance_index) instanceId: u32) -> VsOut {
+      var output: VsOut;
+      let localPosition = vec3<f32>(spritePosition[vertexId], 0.0);
+      output.position = vec4<f32>(localPosition, 1.0);
+      output.uv = localPosition.xy * 0.5 + 0.5;
+      return output;
+    }
+
+    @fragment
+    fn fragBlend(input: VsOut) -> @location(0) vec4<f32> {
+      let currColor = textureSample(currFrame, textureSampler, input.uv);
+      let lastColor = textureSample(lastFrame, textureSampler, input.uv);
+      // 然后需要混合 实现的效果为canvas的globalAlpha
+      // 应该是lastColor 颜色是0.2, 然后当前current直接叠加即可, 
+      // 那么也只是相当于修改了lastFrame的alpha然后进行正常的混合
+      let blendColor = 0.75 * lastColor.rgb + currColor.rgb;
+      // 能有轨迹的效果了,但是速度快的时候会导致采样不足,会导致间隙
+      // 所以canvas的做法是绘制一个连线, 从上一个位置连到当前位置
+      return vec4<f32>(blendColor, 1.0);
+    }
+
+    @fragment
+    fn frag(input: VsOut) -> @location(0) vec4<f32> {
+      return textureSample(lastFrame, textureSampler, input.uv);
     }
   `;
 }
