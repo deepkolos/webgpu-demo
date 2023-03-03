@@ -16,6 +16,15 @@ export class DemoStructBuffer implements Demo {
   preview = '';
 
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
+    const subarray = wgsl.struct({
+      f32_: 'f32',
+      i32_: 'i32',
+    });
+    const substruct = wgsl.struct({
+      vec2_0: 'vec2_f32',
+      vec2_1: 'vec2_f32',
+      subarray: [subarray, 2],
+    });
     const struct = new wgsl.StructBuffer({
       u32_: 'u32',
       i32_: 'i32',
@@ -25,31 +34,8 @@ export class DemoStructBuffer implements Demo {
       vec4_: 'vec4_f32',
       mat3_: 'mat3x3_f32',
       mat4_: 'mat4x4_f32',
-      substruct: {
-        vec2_0: 'vec2_f32',
-        vec2_1: 'vec2_f32',
-        subarray: [
-          {
-            f32_: 'f32',
-            i32_: 'i32',
-          },
-          2,
-        ],
-      },
-      subarray: [
-        {
-          vec2_0: 'vec2_f32',
-          vec2_1: 'vec2_f32',
-          subarray: [
-            {
-              f32_: 'f32',
-              i32_: 'i32',
-            },
-            2,
-          ],
-        },
-        2,
-      ],
+      substruct,
+      subarray: [substruct, 2],
     });
     const bindgroupLayout = device.createBindGroupLayout({
       entries: [{ binding: 0, buffer: { type: 'storage' }, visibility: GPUShaderStage.COMPUTE }],

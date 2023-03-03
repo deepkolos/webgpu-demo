@@ -211,6 +211,10 @@ struct ${name} {
     return view as StructView<T>;
   }
 
+  export function struct<T extends wgsl.Struct>(struct: T) {
+    return struct;
+  }
+
   export class StructBuffer<T extends wgsl.Struct> {
     buffer: Uint8Array;
     view: StructView<NoEmptyRecord<T>>;
