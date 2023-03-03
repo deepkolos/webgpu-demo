@@ -9,6 +9,7 @@ import { DemoMeshline } from './demos/meshline';
 import { DemoBitonicSorter } from './demos/bitonicSorter';
 import { DemoClusterForward } from './demos/clusterForward';
 import { DemoGravityParticles } from './demos/gravityParticles';
+import { DemoStructBuffer } from './demos/structBuffer';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -34,6 +35,7 @@ const demos: Array<Demo> = [
   new DemoBitonicSorter(),
   new DemoClusterForward(),
   new DemoGravityParticles(),
+  new DemoStructBuffer(),
 ];
 
 // init demo list
