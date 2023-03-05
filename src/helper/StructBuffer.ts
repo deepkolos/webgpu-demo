@@ -13,16 +13,9 @@ export namespace wgsl {
     u32 = 'setUint32',
     i32 = 'setInt32',
   }
+  // prettier-ignore
   const PrimitiveTypedArrayMap: {
-    [k in PrimitiveNumber]:
-      | Float64ArrayConstructor
-      | Float32ArrayConstructor
-      | Uint32ArrayConstructor
-      | Uint16ArrayConstructor
-      | Int16ArrayConstructor
-      | Uint8ArrayConstructor
-      | Int8ArrayConstructor
-      | Int32ArrayConstructor;
+    [k in PrimitiveNumber]: Float64ArrayConstructor | Float32ArrayConstructor | Uint32ArrayConstructor | Uint16ArrayConstructor | Int16ArrayConstructor | Uint8ArrayConstructor | Int8ArrayConstructor | Int32ArrayConstructor;
   } = Object.freeze({
     f32: Float32Array,
     u32: Uint32Array,
@@ -76,46 +69,6 @@ export namespace wgsl {
       ? PrimitiveView[T[K]]
       : never;
   };
-
-  export function getPrimitiveString(primitive: Primitive) {
-    if (primitive.indexOf('_') > -1) {
-      return primitive.replace('_', '<') + '>';
-    }
-    return primitive;
-  }
-
-  export function getSubStructString(substruct: Struct, name: string) {
-    return `
-struct ${name} {
-  ${Object.entries(substruct)
-    .map(([key, value]) => {
-      return `    ${key}: ${value},`;
-    })
-    .join('\n')}
-};`;
-  }
-
-  export function getStructString<T extends Struct>(name: string, struct: T, params: any) {
-    let output = '';
-    let structStr = `struct ${name} {`;
-    for (let [key, value] of Object.entries(struct)) {
-      const substructName = name + '_' + key;
-      if (Array.isArray(value)) {
-        structStr += `   ${key}: array<${substructName}${
-          value[1] !== undefined ? `, ${~~(params as any)[key]}` : ''
-        }>,\n`;
-        output += wgsl.getSubStructString(value[0], substructName);
-      } else if (typeof value === 'object') {
-        structStr += `   ${key}: ${substructName},\n`;
-        output += wgsl.getSubStructString(value, substructName);
-      } else {
-        structStr += `   ${key}: ${wgsl.getPrimitiveString(value)},\n`;
-      }
-    }
-    structStr += '}';
-    output += structStr;
-    return output;
-  }
 
   function nextAlign(current: number, align: number): number {
     let aligned = current - (current % align);

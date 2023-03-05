@@ -1,25 +1,61 @@
 import { device } from '../context';
 
-export interface BindGroupLayoutEntryName {
+interface GPUBindGroupLayoutBaseEntry {
+  binding: GPUIndex32;
+  visibility: GPUShaderStageFlags;
+}
+interface GPUBindGroupLayoutBufferEntry extends GPUBindGroupLayoutBaseEntry {
+  buffer: GPUBufferBindingLayout;
+}
+interface GPUBindGroupLayoutSamplerEntry extends GPUBindGroupLayoutBaseEntry {
+  sampler: GPUSamplerBindingLayout;
+}
+interface GPUBindGroupLayoutTextureEntry extends GPUBindGroupLayoutBaseEntry {
+  texture: GPUTextureBindingLayout;
+}
+interface GPUBindGroupLayoutStorageTextureEntry extends GPUBindGroupLayoutBaseEntry {
+  storageTexture: GPUStorageTextureBindingLayout;
+}
+interface GPUBindGroupLayoutExternalTextureEntry extends GPUBindGroupLayoutBaseEntry {
+  externalTexture: GPUExternalTextureBindingLayout;
+}
+// prettier-ignore
+type GPUBindGroupLayoutEntry = GPUBindGroupLayoutBufferEntry | GPUBindGroupLayoutSamplerEntry | GPUBindGroupLayoutTextureEntry | GPUBindGroupLayoutStorageTextureEntry | GPUBindGroupLayoutExternalTextureEntry;
+
+export interface BindGroupLayoutMap {
   [name: string]: GPUBindGroupLayoutEntry;
 }
 
-export type BindGroupEntryNameMap<E extends BindGroupLayoutEntryName> = {
-  [K in keyof E]: BindResource;
+export type BindGroupMap<E extends BindGroupLayoutMap> = {
+  [K in keyof E]: E[K] extends GPUBindGroupLayoutBufferEntry
+    ? GPUBufferBinding
+    : E[K] extends GPUBindGroupLayoutSamplerEntry
+    ? GPUSampler
+    : E[K] extends GPUBindGroupLayoutTextureEntry
+    ? GPUTextureView
+    : E[K] extends GPUBindGroupLayoutStorageTextureEntry
+    ? GPUTextureView
+    : E[K] extends GPUBindGroupLayoutExternalTextureEntry
+    ? GPUExternalTexture
+    : never;
+};
+
+export type BindGroupBindResourceMap<E extends BindGroupMap<T>, T extends BindGroupLayoutMap> = {
+  [K in keyof T]: BindResource<E[K]>;
 };
 
 /**
  * 从bind group layout 生成 bindgroup 实例
  * js内使用name关联
  */
-export class BindGroupLayout<T extends BindGroupLayoutEntryName> {
+export class BindGroupLayout<T extends BindGroupLayoutMap> {
   gpuLayout: GPUBindGroupLayout;
   constructor(public entryLayoutMap: T, label?: string) {
     const entries = Object.values(entryLayoutMap);
     this.gpuLayout = device.createBindGroupLayout({ label, entries });
   }
 
-  getBindGroup(entryMap: BindGroupEntryNameMap<T>): BindGroup {
+  getBindGroup(entryMap: BindGroupMap<T>): BindGroup {
     return new BindGroup(this, entryMap);
   }
 }
@@ -29,17 +65,19 @@ export class BindGroupLayout<T extends BindGroupLayoutEntryName> {
  */
 export class BindGroup {
   gpuBindGroup: GPUBindGroup;
+  entryMap: BindGroupBindResourceMap<BindGroupMap<BindGroupLayoutMap>, BindGroupLayoutMap>;
+
   constructor(
-    private bindGroupLayout: BindGroupLayout<BindGroupLayoutEntryName>,
-    public entryMap: BindGroupEntryNameMap<BindGroupLayoutEntryName>,
+    private bindGroupLayout: BindGroupLayout<BindGroupLayoutMap>,
+    entryMap: BindGroupMap<BindGroupLayoutMap>,
   ) {
-    this.gpuBindGroup = this.createBindGroup();
-    Object.keys(entryMap).forEach(name => {
-      entryMap[name].addEventListener('update', this.createBindGroup);
-    });
+    this.entryMap = Object.keys(entryMap).map(
+      name => new BindResource(entryMap[name], this),
+    ) as any;
+    this.gpuBindGroup = this.updateBindGroup();
   }
 
-  private createBindGroup = () => {
+  updateBindGroup = () => {
     const entries: Iterable<GPUBindGroupEntry> = Object.entries(
       this.bindGroupLayout.entryLayoutMap,
     ).map(([name, layout]) => ({
@@ -56,14 +94,11 @@ export class BindGroup {
 /**
  * 资源更新通知依赖更新
  */
-export class BindResource extends EventTarget {
-  static updateEvent = new Event('update');
-  constructor(public gpuResource: GPUBindingResource) {
-    super();
-  }
+class BindResource<T extends GPUBindingResource> {
+  constructor(public gpuResource: T, public bindGroup: BindGroup) {}
 
-  update(gpuResource: GPUBindingResource) {
+  update(gpuResource: T) {
     this.gpuResource = gpuResource;
-    this.dispatchEvent(BindResource.updateEvent);
+    this.bindGroup.updateBindGroup();
   }
 }
