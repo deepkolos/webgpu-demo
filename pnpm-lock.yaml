@@ -4,7 +4,7 @@ specifiers:
   '@types/lodash-es': ^4.17.6
   '@webgpu/types': latest
   array-shuffle: ^3.0.0
-  buffer-backed-object: ^1.0.1
+  buffer-backed-object: 1.0.0
   gl-matrix: ^3.4.3
   lodash-es: ^4.17.21
   typescript: ^4.9.3
@@ -14,7 +14,7 @@ specifiers:
 dependencies:
   '@types/lodash-es': 4.17.6
   array-shuffle: 3.0.0
-  buffer-backed-object: 1.0.1
+  buffer-backed-object: 1.0.0
   gl-matrix: 3.4.3
   lodash-es: 4.17.21
 
@@ -324,8 +324,8 @@ packages:
     resolution: {integrity: sha512-jgsaNduz+ndvGyFt3uSuWqvy4lCnIJiovtouQN5JZHOKCS2QuhEdbcQHFhVksz2N2U9hXJo8odG7ETyWlEeuDw==}
     dev: true
 
-  /buffer-backed-object/1.0.1:
-    resolution: {integrity: sha512-GG+XwzcFz2FoTSF460C+3elNSTLhVGkZh/wT1OssuG5+fsMO6Xa5FlNBNlbAx3S4AVSAGbxxHekUQU9eGzzang==}
+  /buffer-backed-object/1.0.0:
+    resolution: {integrity: sha512-HRvcCokEXPCbsOnCH/RJ0owuel7vqijYtG0Vq/V55lKad4xZYQjRFdrYNeZUg5t+rMDMecog/MhSP3P0zxiVxw==}
     dev: false
 
   /cac/6.7.14:
