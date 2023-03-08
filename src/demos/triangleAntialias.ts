@@ -1,6 +1,6 @@
 import { canvasCtx, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
-import { Demo, loadImageBitmap } from './demo';
+import { createBuffer, Demo, loadImageBitmap } from './demo';
 import vertShaderCode from '../shaders/triangle-texture.vert.wgsl?raw';
 import fragShaderCode from '../shaders/triangle-texture.frag.wgsl?raw';
 // import { tail1Img } from '../assets/tail-img';
@@ -20,6 +20,14 @@ const uvs = new Float32Array([
   0.0, 1.0,
   1.0, 1.0,
 ]);
+// prettier-ignore
+const testAttributes = new Float32Array([
+  // vec2  vec3     vec4
+  1, 2,    3, 4, 5, 6, 7, 8, 9, 
+  1, 2,    3, 4, 5, 6, 7, 8, 9, 
+  1, 2,    3, 4, 5, 6, 7, 8, 9, 
+  1, 2,    3, 4, 5, 6, 7, 8, 9,
+]);
 const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 const uniformData = new Float32Array([
   // ♟️ ModelViewProjection Matrix (Identity)
@@ -36,7 +44,7 @@ export class DemoTriangleAntialias implements Demo {
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
   bindGroup!: GPUBindGroup;
-  buffers!: { positionBuffer: GPUBuffer; indexBuffer: GPUBuffer; colorBuffer: GPUBuffer };
+  buffers!: { positionBuffer: GPUBuffer; indexBuffer: GPUBuffer; colorBuffer: GPUBuffer, testBuffer: GPUBuffer };
   disposed = false;
   pipeline!: GPURenderPipeline;
   lastSubmitWorkDonePromise?: Promise<undefined>;
@@ -71,6 +79,14 @@ export class DemoTriangleAntialias implements Demo {
             arrayStride: 4 * 2,
             attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x2' }],
             stepMode: 'vertex',
+          },
+          {
+            arrayStride: 4 * 9,
+            attributes: [
+              { shaderLocation: 2, offset: 0, format: 'float32x2' },
+              { shaderLocation: 3, offset: 4 * 2, format: 'float32x3' },
+              { shaderLocation: 4, offset: 4 * 5, format: 'float32x4' },
+            ],
           },
         ],
       },
@@ -126,6 +142,8 @@ export class DemoTriangleAntialias implements Demo {
     new Float32Array(uvBuffer.getMappedRange()).set(uvs);
     uvBuffer.unmap();
 
+    const testBuffer = createBuffer(testAttributes, GPUBufferUsage.VERTEX, true);
+
     const indexBuffer = device.createBuffer({
       mappedAtCreation: true,
       size: (indices.byteLength + 3) & ~3,
@@ -174,7 +192,7 @@ export class DemoTriangleAntialias implements Demo {
 
     this.bindGroup = bindGourp;
     this.pipeline = pipeline;
-    this.buffers = { positionBuffer, indexBuffer, colorBuffer: uvBuffer };
+    this.buffers = { positionBuffer, indexBuffer, colorBuffer: uvBuffer, testBuffer };
     this.disposed = false;
 
     const canvasConfig: GPUCanvasConfiguration = {
@@ -246,6 +264,7 @@ export class DemoTriangleAntialias implements Demo {
     passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.setVertexBuffer(0, this.buffers.positionBuffer);
     passEncoder.setVertexBuffer(1, this.buffers.colorBuffer);
+    passEncoder.setVertexBuffer(2, this.buffers.testBuffer);
     passEncoder.setIndexBuffer(this.buffers.indexBuffer, 'uint16');
     passEncoder.setViewport(0, 0, w, h, 0, 1);
     passEncoder.setScissorRect(0, 0, w, h);
@@ -266,5 +285,6 @@ export class DemoTriangleAntialias implements Demo {
     buffers.colorBuffer.destroy();
     buffers.indexBuffer.destroy();
     buffers.positionBuffer.destroy();
+    buffers.testBuffer.destroy();
   }
 }

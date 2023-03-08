@@ -76,13 +76,13 @@ export namespace wgsl {
     return aligned;
   }
 
-  export function structSize<T extends Struct>(struct: T): number {
+  export function structSize<T extends Struct>(struct: T, ignoreAlign?: boolean): number {
     let stride = 0;
     for (const value of Object.values(struct)) {
       const { align, size } = structValueSizeAlign(value);
-      stride = nextAlign(stride, align) + size;
+      stride = nextAlign(stride, ignoreAlign ? 1 : align) + size;
     }
-    stride = nextAlign(stride, structAlign(struct));
+    stride = nextAlign(stride, structAlign(struct, ignoreAlign));
     return stride;
   }
 
@@ -101,7 +101,8 @@ export namespace wgsl {
     return { align, size, itemSize: itemSize ?? size };
   }
 
-  export function structAlign<T extends Struct>(struct: T): number {
+  export function structAlign<T extends Struct>(struct: T, ignoreAlign?: boolean): number {
+    if (ignoreAlign) return 1;
     return Math.max(
       ...Object.values(struct).map(value => {
         if (Array.isArray(value)) {
@@ -119,6 +120,7 @@ export namespace wgsl {
     buffer: ArrayBuffer,
     struct: T,
     byteOffset = 0,
+    ignoreAlign = false,
   ): StructView<T> {
     const view: any = {};
     const dataView = new DataView(buffer);
@@ -126,17 +128,17 @@ export namespace wgsl {
 
     for (let [key, value] of Object.entries(struct)) {
       const { align, size, itemSize } = structValueSizeAlign(value);
-      const offset = nextAlign(stride, align);
+      const offset = nextAlign(stride, ignoreAlign ? 1 : align);
 
       if (Array.isArray(value)) {
         const arrayView: any[] = new Array(value[1]);
         for (let i = 0, il = value[1]; i < il; i++) {
-          arrayView[i] = structView(buffer, value[0], offset + itemSize * i);
+          arrayView[i] = structView(buffer, value[0], offset + itemSize * i, ignoreAlign);
         }
         Object.freeze(arrayView);
         view[key] = arrayView;
       } else if (typeof value === 'object') {
-        view[key] = structView(buffer, value, offset);
+        view[key] = structView(buffer, value, offset, ignoreAlign);
       } else {
         if (value.indexOf('_') > -1) {
           const [prefix, primitive] = value.split('_') as [string, PrimitiveNumber];
@@ -171,10 +173,11 @@ export namespace wgsl {
   export class StructBuffer<T extends wgsl.Struct> {
     buffer: Uint8Array;
     view: StructView<NoEmptyRecord<T>>;
-    constructor(public struct: NoEmptyRecord<T>) {
-      const byteLength = wgsl.structSize(struct);
+    constructor(public struct: NoEmptyRecord<T>, ignoreAlign?: boolean) {
+      const byteLength = wgsl.structSize(struct, ignoreAlign);
+      console.log(byteLength);
       this.buffer = new Uint8Array(byteLength);
-      this.view = wgsl.structView(this.buffer.buffer, struct);
+      this.view = wgsl.structView(this.buffer.buffer, struct, 0, ignoreAlign);
     }
 
     clone() {

@@ -103,3 +103,23 @@ test('StructBuffer view', () => {
   expect(view.subarray.length).toBe(2);
   expect(view.subarray[0].subarray.length).toBe(2);
 });
+
+test('StructBuffer ignore align', () => {
+  const { view, buffer } = new wgsl.StructBuffer(
+    {
+      a: 'vec2_f32',
+      b: 'vec3_f32',
+      c: 'vec4_f32',
+      d: 'f32',
+      e: 'mat3x3_f32',
+      f: 'mat4x4_f32',
+    },
+    true,
+  );
+
+  expect(view.a.byteOffset).toBe(0);
+  expect(view.b.byteOffset).toBe(4 * 2);
+  expect(view.c.byteOffset).toBe(4 * 5);
+  expect(view.e.byteOffset).toBe(4 * 10);
+  expect(view.f.byteOffset).toBe(4 * 22);
+});
