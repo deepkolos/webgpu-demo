@@ -13,6 +13,14 @@ export namespace wgsl {
     u32 = 'setUint32',
     i32 = 'setInt32',
   }
+  export enum PrimitiveToGPUVertexFormat {
+    f32 = 'float32',
+    u32 = 'uint32',
+    i32 = 'sint32',
+    vec2_f32 = 'float32x2',
+    vec3_f32 = 'float32x3',
+    vec4_f32 = 'float32x4',
+  }
   // prettier-ignore
   const PrimitiveTypedArrayMap: {
     [k in PrimitiveNumber]: Float64ArrayConstructor | Float32ArrayConstructor | Uint32ArrayConstructor | Uint16ArrayConstructor | Int16ArrayConstructor | Uint8ArrayConstructor | Int8ArrayConstructor | Int32ArrayConstructor;
@@ -57,9 +65,13 @@ export namespace wgsl {
     mat3x3_f32: Float32Array;
   };
   export type Array = [struct: Struct, length: number, runtimeSized?: boolean];
-  export interface Struct {
+  export type Struct = {
     [k: string]: Primitive | Array | Struct;
-  }
+  };
+  type PlainPrimitive = Exclude<Primitive, 'mat4x4_f32' | 'mat3x3_f32'>;
+  export type PlainStruct = {
+    [k: string]: PlainPrimitive;
+  };
   export type StructView<T extends Struct> = {
     [K in keyof T]: T[K] extends Struct
       ? StructView<T[K]>
@@ -68,6 +80,9 @@ export namespace wgsl {
       : T[K] extends Primitive
       ? PrimitiveView[T[K]]
       : never;
+  };
+  export type PlainStructInfo<T extends PlainStruct> = {
+    [K in keyof T]: { size: number; offset: number };
   };
 
   function nextAlign(current: number, align: number): number {
@@ -166,6 +181,21 @@ export namespace wgsl {
     return view as StructView<T>;
   }
 
+  export function structInfo<T extends PlainStruct>(
+    plainStruct: T,
+    ignoreAlign?: boolean,
+  ): PlainStructInfo<T> {
+    const info: any = {};
+    let stride = 0;
+    for (let [key, value] of Object.entries(plainStruct)) {
+      const { align, size } = structValueSizeAlign(value);
+      const offset = nextAlign(stride, ignoreAlign ? 1 : align);
+      info[key] = { offset, size };
+      stride = offset + size;
+    }
+    return info;
+  }
+
   export function struct<T extends wgsl.Struct>(struct: T) {
     return struct;
   }
@@ -175,7 +205,6 @@ export namespace wgsl {
     view: StructView<NoEmptyRecord<T>>;
     constructor(public struct: NoEmptyRecord<T>, ignoreAlign?: boolean) {
       const byteLength = wgsl.structSize(struct, ignoreAlign);
-      console.log(byteLength);
       this.buffer = new Uint8Array(byteLength);
       this.view = wgsl.structView(this.buffer.buffer, struct, 0, ignoreAlign);
     }
@@ -183,5 +212,47 @@ export namespace wgsl {
     clone() {
       return new StructBuffer(this.struct);
     }
+  }
+
+  export function stringifyPrimitive(value: Primitive) {
+    let typeStr: string = value;
+    if (value.indexOf('_') > -1) {
+      typeStr = value.replace('_', '<') + '>';
+    }
+    return typeStr;
+  }
+
+  export function stringifyStruct<T extends wgsl.Struct>(
+    name: string,
+    struct: NoEmptyRecord<T>,
+    structCache = new Map<string, { name: string; structStr: string }>(),
+  ) {
+    let structStr = `struct ${name} {
+${Object.entries(struct)
+  .map(([key, value]) => {
+    let typeStr: string;
+    if (Array.isArray(value)) {
+      typeStr = `array<${name}_${key}${value[2] ? '' : `, ${value[1]}`}>`;
+      if (!structCache.has(JSON.stringify(value[0]))) {
+        stringifyStruct(`${name}_${key}`, value[0], structCache);
+      }
+    } else if (typeof value === 'object') {
+      typeStr = `${name}_${key}`;
+      if (!structCache.has(JSON.stringify(value))) {
+        stringifyStruct(typeStr, value, structCache);
+      }
+    } else {
+      typeStr = stringifyPrimitive(value);
+    }
+    return `  ${key}: ${typeStr},`;
+  })
+  .join('\n')}
+};`;
+    structCache.set(JSON.stringify(struct), { name, structStr });
+    const subStruct = [...structCache.values()]
+      .filter(i => i.name !== name)
+      .map(i => i.structStr)
+      .join('\n');
+    return subStruct + '\n' + structStr;
   }
 }

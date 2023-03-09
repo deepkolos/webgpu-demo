@@ -123,3 +123,51 @@ test('StructBuffer ignore align', () => {
   expect(view.e.byteOffset).toBe(4 * 10);
   expect(view.f.byteOffset).toBe(4 * 22);
 });
+
+test('StructBuffer stringifyStruct', () => {
+  const substruct = wgsl.struct({
+    vec2_0: 'vec2_f32',
+    vec2_1: 'vec2_f32',
+    subarray: [
+      {
+        f32_: 'f32',
+        i32_: 'i32',
+      },
+      2,
+    ],
+  });
+  const str = wgsl.stringifyStruct('Test', {
+    u32_: 'u32',
+    i32_: 'i32',
+    f32_: 'f32',
+    vec2_: 'vec2_f32',
+    vec3_: 'vec3_f32',
+    vec4_: 'vec4_f32',
+    mat3_: 'mat3x3_f32',
+    mat4_: 'mat4x4_f32',
+    substruct,
+    subarray: [substruct, 2],
+  });
+  console.log(str);
+  expect(str).toBe(`struct Test_substruct_subarray {
+  f32_: f32,
+  i32_: i32,
+};
+struct Test_substruct {
+  vec2_0: vec2<f32>,
+  vec2_1: vec2<f32>,
+  subarray: array<Test_substruct_subarray, 2>,
+};
+struct Test {
+  u32_: u32,
+  i32_: i32,
+  f32_: f32,
+  vec2_: vec2<f32>,
+  vec3_: vec3<f32>,
+  vec4_: vec4<f32>,
+  mat3_: mat3x3<f32>,
+  mat4_: mat4x4<f32>,
+  substruct: Test_substruct,
+  subarray: array<Test_subarray, 2>,
+};`)
+});
