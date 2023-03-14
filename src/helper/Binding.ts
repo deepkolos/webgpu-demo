@@ -22,11 +22,14 @@ interface GPUBindGroupLayoutExternalTextureEntry extends GPUBindGroupLayoutBaseE
 }
 // prettier-ignore
 type BindGroupLayoutEntry = GPUBindGroupLayoutBufferEntry | GPUBindGroupLayoutSamplerEntry | GPUBindGroupLayoutTextureEntry | GPUBindGroupLayoutStorageTextureEntry | GPUBindGroupLayoutExternalTextureEntry;
-type GPUBindGroupLayoutEntry<T = BindGroupLayoutEntry> = {
-  [K in keyof T]-?: T[K];
-};
-type GPUBindGroupLayoutMap = {
-  [name: string]: GPUBindGroupLayoutEntry;
+// type GPUBindGroupLayoutEntry<T = BindGroupLayoutEntry> = {
+//   [K in keyof T]-?: T[K]; // 编辑器类型推断变any了...
+// };
+type GPUBindGroupLayoutMap<T extends BindGroupLayoutMap> = {
+  // [K in keyof T]: {
+  //   [K1 in keyof T[K]]-?: T[K][K1]; // 编辑器类型推断变any了...
+  // };
+  [K in keyof T]: BindGroupLayoutEntry;
 };
 export interface BindGroupLayoutMap {
   [name: string]: BindGroupLayoutEntry;
@@ -50,52 +53,54 @@ export type BindGroupBindResourceMap<E extends BindGroupMap<T>, T extends BindGr
   [K in keyof T]: BindResource<E[K]>;
 };
 
+type VertexLayoutMap = {
+  [k: string]: VertexBufferLayout<wgsl.PlainStruct>;
+};
+
 /**
  * 从bind group layout 生成 bindgroup 实例
  * js内使用name关联
  */
 export class BindGroupLayout<T extends BindGroupLayoutMap> {
   gpuLayout: GPUBindGroupLayout;
-  entryLayoutMap: GPUBindGroupLayoutMap;
+  entryLayoutMap: GPUBindGroupLayoutMap<T>;
   constructor(entryLayoutMap: T, label?: string) {
     const entries = Object.values(entryLayoutMap).map((i, k) => {
       i.binding ??= k;
       return i;
     }) as GPUBindGroupLayoutEntry[];
-    this.entryLayoutMap = entryLayoutMap as GPUBindGroupLayoutMap;
+    this.entryLayoutMap = entryLayoutMap as unknown as GPUBindGroupLayoutMap<T>;
     this.gpuLayout = device?.createBindGroupLayout({ label, entries });
   }
 
-  getBindGroup(entryMap: BindGroupMap<T>): BindGroup {
-    return new BindGroup(this, entryMap);
+  getBindGroup(entryMap: BindGroupMap<T>): BindGroup<T> {
+    return new BindGroup<T>(this, entryMap);
   }
 }
 
 /**
  * 当所依赖资源有变更时自动更新对应bindgroup
  */
-export class BindGroup {
-  gpuBindGroup: GPUBindGroup;
-  entryMap: BindGroupBindResourceMap<BindGroupMap<BindGroupLayoutMap>, BindGroupLayoutMap>;
+export class BindGroup<T extends BindGroupLayoutMap> {
+  gpuBindGroup!: GPUBindGroup;
+  entryMap: BindGroupBindResourceMap<BindGroupMap<T>, T>;
 
-  constructor(
-    private bindGroupLayout: BindGroupLayout<BindGroupLayoutMap>,
-    entryMap: BindGroupMap<BindGroupLayoutMap>,
-  ) {
-    this.entryMap = Object.keys(entryMap).map(
-      name => new BindResource(entryMap[name], this),
-    ) as any;
-    this.gpuBindGroup = this.updateBindGroup();
+  constructor(private bindGroupLayout: BindGroupLayout<T>, entryMap: BindGroupMap<T>) {
+    this.entryMap = {} as any;
+    Object.keys(entryMap).map((name: keyof T) => {
+      this.entryMap[name] = new BindResource(entryMap[name], this) as any;
+    });
+    this.updateBindGroup();
   }
 
   updateBindGroup = () => {
     const entries: Iterable<GPUBindGroupEntry> = Object.entries(
       this.bindGroupLayout.entryLayoutMap,
-    ).map(([name, layout]) => ({
-      binding: layout.binding,
+    ).map(([name, layout], i) => ({
+      binding: layout.binding ?? i,
       resource: this.entryMap[name].gpuResource,
     }));
-    return device?.createBindGroup({
+    this.gpuBindGroup = device?.createBindGroup({
       layout: this.bindGroupLayout.gpuLayout,
       entries,
     });
@@ -105,8 +110,11 @@ export class BindGroup {
 /**
  * 资源更新通知依赖更新
  */
-class BindResource<T extends GPUBindingResource> {
-  constructor(public gpuResource: T, public bindGroup: BindGroup) {}
+class BindResource<
+  T extends GPUBindingResource,
+  E extends BindGroupLayoutMap = BindGroupLayoutMap,
+> {
+  constructor(public gpuResource: T, public bindGroup: BindGroup<E>) {}
 
   update(gpuResource: T) {
     this.gpuResource = gpuResource;
@@ -148,9 +156,9 @@ export class PipelineLayout<T extends BindGroupLayout<any>[]> {
             } else if ('texture' in value) {
               typeStr = 'texture_2d<f32>';
             } else if ('storageTexture' in value) {
-              typeStr = 'texture_2d<f32>';
+              typeStr = 'texture_2d<f32>'; // TBD
             } else {
-              typeStr = 'texture_2d<f32>';
+              typeStr = 'texture_2d<f32>'; // TBD
             }
             return `@group(${i}) @binding(${value.binding}) var${varTypeStr} ${key}: ${typeStr};`;
           })
@@ -173,7 +181,7 @@ export class VertexBufferLayout<T extends wgsl.PlainStruct> {
   }
 }
 
-export class VertexLayout<T extends VertexBufferLayout<wgsl.PlainStruct>[]> {
+export class VertexLayout<T extends VertexLayoutMap> {
   gpuBufferLayout: GPUVertexBufferLayout[];
   shaderCode: string;
   constructor(public bufferLayouts: T) {
@@ -183,7 +191,7 @@ export class VertexLayout<T extends VertexBufferLayout<wgsl.PlainStruct>[]> {
 
   private getBufferLayout() {
     let id = 0;
-    return this.bufferLayouts.map(layout => ({
+    return Object.values(this.bufferLayouts).map(layout => ({
       arrayStride: layout.structSize,
       stepMode: layout.stepMode,
       attributes: Object.keys(layout.plainStruct).map(key => ({
@@ -197,7 +205,7 @@ export class VertexLayout<T extends VertexBufferLayout<wgsl.PlainStruct>[]> {
   private getShaderCode() {
     let id = 0;
     let code = `struct VsIn {
-${this.bufferLayouts
+${Object.values(this.bufferLayouts)
   .map(layout => {
     return Object.keys(layout.plainStruct)
       .map(name => {

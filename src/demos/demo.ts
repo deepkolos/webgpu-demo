@@ -22,11 +22,11 @@ export function hexToRGB(hex: string) {
   ].map(i => i / 255);
 }
 
-export async function loadImageBitmap(src: string): Promise<ImageBitmap> {
+export async function loadImageBitmap(src: string, flipY = true): Promise<ImageBitmap> {
   const img = document.createElement('img');
   img.src = src;
   await img.decode();
-  return createImageBitmap(img, { imageOrientation: 'flipY' });
+  return createImageBitmap(img, { imageOrientation: flipY ? 'flipY' : 'none' });
 }
 
 export const align = (len: number, alignment: number = 4) => {
@@ -34,10 +34,10 @@ export const align = (len: number, alignment: number = 4) => {
 };
 
 export function createBuffer(
-  data: Float32Array | Uint32Array | Uint8Array,
+  data: Float32Array | Uint32Array | Uint8Array | Uint16Array,
   usage: GPUFlagsConstant,
   mappedAtCreation = false,
-  alignment = 16,
+  alignment = 4,
 ) {
   const buffer = device.createBuffer({
     usage,

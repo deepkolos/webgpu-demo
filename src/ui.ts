@@ -10,6 +10,7 @@ import { DemoBitonicSorter } from './demos/bitonicSorter';
 import { DemoClusterForward } from './demos/clusterForward';
 import { DemoGravityParticles } from './demos/gravityParticles';
 import { DemoStructBuffer } from './demos/structBuffer';
+import { DemoCube } from './demos/cube';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -36,6 +37,7 @@ const demos: Array<Demo> = [
   new DemoClusterForward(),
   new DemoGravityParticles(),
   new DemoStructBuffer(),
+  new DemoCube(),
 ];
 
 // init demo list
@@ -156,7 +158,7 @@ function genOptions(opts: Record<string, Options>) {
       const valueMutation: Vec2 | Vec3 | Vec4 = [...arr] as any;
       for (let i = 0; i < len; i++) {
         const input = document.createElement('input');
-        input.classList.add('opt-vec-input')
+        input.classList.add('opt-vec-input');
         input.type = 'number';
         input.value = String(arr[i]);
         input.step = (opt as any).step as unknown as string;

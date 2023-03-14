@@ -8,17 +8,17 @@ enum GPUShaderStage {
 }
 
 test('Binding VertexLayout.shaderCode', () => {
-  const vertexLayout = new VertexLayout([
-    new VertexBufferLayout({
+  const vertexLayout = new VertexLayout({
+    a: new VertexBufferLayout({
       a: 'vec2_f32',
       b: 'vec3_f32',
       c: 'vec4_f32',
     }),
-    new VertexBufferLayout({
+    b: new VertexBufferLayout({
       f: 'f32',
       u: 'u32',
     }),
-  ]);
+  });
   // console.log(vertexLayout.shaderCode);
   expect(vertexLayout.shaderCode).toBe(`struct VsIn {
   @location(0) a: vec2<f32>,
@@ -30,17 +30,17 @@ test('Binding VertexLayout.shaderCode', () => {
 });
 
 test('Binding VertexLayout.gpuBufferLayout', () => {
-  const vertexLayout = new VertexLayout([
-    new VertexBufferLayout({
+  const vertexLayout = new VertexLayout({
+    a: new VertexBufferLayout({
       a: 'vec2_f32',
       b: 'vec3_f32',
       c: 'vec4_f32',
     }),
-    new VertexBufferLayout({
+    b: new VertexBufferLayout({
       f: 'f32',
       u: 'u32',
     }),
-  ]);
+  });
   // console.log(JSON.stringify(vertexLayout.gpuBufferLayout, null, 2));
   expect(vertexLayout.gpuBufferLayout).toStrictEqual([
     {
