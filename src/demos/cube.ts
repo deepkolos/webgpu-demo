@@ -1,6 +1,7 @@
 import { mat4 } from 'gl-matrix';
 import { canvasCtx, canvasFormat, device, queue } from '../context';
 import { BindGroupLayout, PipelineLayout, VertexBufferLayout, VertexLayout, wgsl } from '../helper';
+import { GPUShader } from '../helper/Enum';
 import { GenOptions, Refs } from '../ui';
 import { createBuffer, Demo } from './demo';
 
@@ -12,6 +13,19 @@ const cube = {
   indices:  new Uint16Array([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23]),
 }
 
+const uboStruct = {
+  world: 'mat4x4_f32',
+  projection: 'mat4x4_f32',
+  viewInverse: 'mat4x4_f32',
+  worldInverseTranspose: 'mat4x4_f32',
+  lightWorldPos: 'vec3_f32',
+  lightColor: 'vec4_f32',
+  ambient: 'vec4_f32',
+  specular: 'vec4_f32',
+  shininess: 'f32',
+  specularFactor: 'f32',
+} satisfies wgsl.Struct;
+
 export class DemoCube implements Demo {
   name = 'Cube';
   preview = '';
@@ -19,31 +33,10 @@ export class DemoCube implements Demo {
   depthTexture!: GPUTexture;
   depthTextureView!: GPUTextureView;
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
-    const uboStruct = wgsl.struct({
-      world: 'mat4x4_f32',
-      projection: 'mat4x4_f32',
-      viewInverse: 'mat4x4_f32',
-      worldInverseTranspose: 'mat4x4_f32',
-      lightWorldPos: 'vec3_f32',
-      lightColor: 'vec4_f32',
-      ambient: 'vec4_f32',
-      specular: 'vec4_f32',
-      shininess: 'f32',
-      specularFactor: 'f32',
-    });
     const bindGroupLayout = new BindGroupLayout({
-      ubo: {
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        buffer: { struct: uboStruct },
-      },
-      diffuse: {
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        texture: {},
-      },
-      diffuseSampler: {
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        sampler: {},
-      },
+      ubo: { visibility: GPUShader.VS | GPUShader.FS, buffer: { struct: uboStruct } },
+      diffuse: { visibility: GPUShader.FS, texture: {} },
+      diffuseSampler: { visibility: GPUShader.FS, sampler: {} },
     });
     const pipelineLayout = new PipelineLayout([bindGroupLayout]);
     const vertexLayout = new VertexLayout({
@@ -104,7 +97,7 @@ ${shader}`;
       },
       primitive: {
         frontFace: 'ccw',
-        cullMode: 'back'
+        cullMode: 'back',
       },
       depthStencil: {
         format: 'depth24plus',

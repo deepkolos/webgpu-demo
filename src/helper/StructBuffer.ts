@@ -196,6 +196,7 @@ export namespace wgsl {
     return info;
   }
 
+  // 更推荐使用 {} satisfies wgsl.Struct
   export function struct<T extends wgsl.Struct>(struct: T) {
     return struct;
   }
