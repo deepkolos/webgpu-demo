@@ -1,5 +1,5 @@
 import { quat, vec3 } from 'gl-matrix';
-import { device } from '../context';
+import { device, queue } from '../context';
 import type { Refs, GenOptions } from '../ui';
 
 export interface Demo {
@@ -71,3 +71,48 @@ export const getRotateAxis = (
 
   return out;
 };
+
+export async function createTexture(
+  desc: (
+    | { src: string }
+    | { bitmap: ImageBitmap }
+    | { data: number[]; width: number; height: number }
+  ) & { usage: GPUTextureUsageFlags },
+) {
+  let bitmap: ImageBitmap | undefined;
+
+  if ('src' in desc) {
+    bitmap = await loadImageBitmap(desc.src);
+  } else if ('bitmap' in desc) {
+    bitmap = desc.bitmap;
+  } else if ('data' in desc) {
+    // const imageData = new ImageData(new Uint8ClampedArray(desc.data), desc.width, desc.height);
+    // bitmap = await createImageBitmap(imageData);
+    const texture = device.createTexture({
+      size: [desc.width, desc.height, 1],
+      format: 'rgba8unorm',
+      usage: desc.usage | GPUTextureUsage.COPY_DST,
+    });
+    device.queue.writeTexture(
+      { texture },
+      new Uint8ClampedArray(desc.data),
+      { bytesPerRow: 4 * desc.width },
+      desc,
+    );
+    return texture;
+  }
+
+  if (bitmap) {
+    const texture = device.createTexture({
+      size: [bitmap.width, bitmap.height, 1],
+      format: 'rgba8unorm',
+      usage: desc.usage | GPUTextureUsage.COPY_DST,
+    });
+    queue.copyExternalImageToTexture({ source: bitmap }, { texture }, [
+      bitmap.width,
+      bitmap.height,
+    ]);
+    return texture;
+  }
+  throw new Error('createTexture failed');
+}

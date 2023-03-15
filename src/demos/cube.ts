@@ -3,7 +3,7 @@ import { canvasCtx, canvasFormat, device, queue } from '../context';
 import { BindGroupLayout, PipelineLayout, VertexBufferLayout, VertexLayout, wgsl } from '../helper';
 import { GPUShader } from '../helper/Enum';
 import { GenOptions, Refs } from '../ui';
-import { createBuffer, Demo } from './demo';
+import { createBuffer, createTexture, Demo } from './demo';
 
 // prettier-ignore
 const cube = {
@@ -54,20 +54,13 @@ export class DemoCube implements Demo {
       indices: createBuffer(cube.indices, GPUBufferUsage.INDEX, true),
     };
 
-    const imageData = new Uint8ClampedArray([
-      255, 255, 255, 255, 192, 192, 192, 255, 192, 192, 192, 255, 255, 255, 255, 255,
-    ]);
-    const texture = device.createTexture({
-      size: [2, 2, 1],
-      format: 'rgba8unorm', // 与rgba8uint有啥区别? 前者可以texture_2d 后者不行
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    const texture = await createTexture({
+      data: [255, 255, 255, 255, 192, 192, 192, 255, 192, 192, 192, 255, 255, 255, 255, 255],
+      width: 2,
+      height: 2,
+      // 这里需要RENDER_ATTACHMENT是否说明copyExternalImageToTexture内部实现里有一次drawcall??
+      usage: GPUTextureUsage.TEXTURE_BINDING,
     });
-    device.queue.writeTexture(
-      { texture },
-      imageData,
-      { bytesPerRow: 4 * 2 },
-      { width: 2, height: 2 },
-    );
     const nearstSampler = device.createSampler({});
 
     const bindGroup = bindGroupLayout.getBindGroup({
