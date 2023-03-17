@@ -10,3 +10,5 @@ WebGPU 学习 Demos
 - [BitonicSorter](./src/demos/bitonicSorter.ts)
 - [ClusterForward](./src/demos/clusterForward.ts)
 - [GravityParticles](./src/demos/gravityParticles.ts)
+- [Cube](./src/demos/cube.ts)
+- [StructBuffer](./src/demos/structBuffer.ts)

@@ -4,6 +4,7 @@ import { BindGroupLayout, PipelineLayout, VertexBufferLayout, VertexLayout, wgsl
 import { GPUShader } from '../helper/Enum';
 import { GenOptions, Refs } from '../ui';
 import { createBuffer, createTexture, Demo } from './demo';
+import preview from '../assets/screenshots/cube.png';
 
 // prettier-ignore
 const cube = {
@@ -28,10 +29,12 @@ const uboStruct = {
 
 export class DemoCube implements Demo {
   name = 'Cube';
-  preview = '';
+  preview = preview;
   render!: () => void;
   depthTexture!: GPUTexture;
   depthTextureView!: GPUTextureView;
+  disposed = false;
+  lastFrameId!: number;
   async init(refs: Refs, genOptions: GenOptions): Promise<void> {
     const bindGroupLayout = new BindGroupLayout({
       ubo: { visibility: GPUShader.VS | GPUShader.FS, buffer: { struct: uboStruct } },
@@ -110,7 +113,9 @@ ${shader}`;
     uboView.specularFactor = 1;
 
     let time = 0;
+    this.disposed = false;
     this.render = () => {
+      if (this.disposed) return;
       const aspect = canvasCtx.canvas.width / canvasCtx.canvas.height;
       time += 0.016;
       mat4.fromYRotation(uboView.world, time);
@@ -146,7 +151,7 @@ ${shader}`;
       passEncoder.end();
       queue.submit([commandEncoder.finish()]);
 
-      requestAnimationFrame(this.render);
+      this.lastFrameId = requestAnimationFrame(this.render);
     };
 
     setTimeout(this.render, 10);
@@ -160,7 +165,10 @@ ${shader}`;
     });
     this.depthTextureView = this.depthTexture.createView();
   }
-  dispose(): void {}
+  dispose(): void {
+    this.disposed = true;
+    cancelAnimationFrame(this.lastFrameId);
+  }
 }
 
 const shader = /* wgsl */ `
