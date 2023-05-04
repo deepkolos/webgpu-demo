@@ -2,8 +2,8 @@ import { canvasCtx, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
 import { Demo } from './demo';
 
-export class DemoSmallest implements Demo {
-  name = 'Smallest';
+export class DemoSmallestQuad implements Demo {
+  name = 'SmallestQuad';
   preview = '';
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
@@ -17,9 +17,18 @@ export class DemoSmallest implements Demo {
       layout: 'auto',
       vertex: {
         module: device.createShaderModule({
-          code: /* wgsl */ `@vertex
-fn main() -> @builtin(position) vec4f { 
-  return vec4f(0.0, 0.0, 0.5, 1.0);
+          code: /* wgsl */ `
+var<private> quadPosition = array<vec2<f32>, 6>(
+  vec2<f32>(-1.0, -1.0),
+  vec2<f32>(-1.0, 1.0),
+  vec2<f32>(1.0, 1.0),
+  vec2<f32>(-1.0, -1.0),
+  vec2<f32>(1.0, 1.0),
+  vec2<f32>(1.0, -1.0),
+);
+@vertex
+fn main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f { 
+  return vec4f(quadPosition[vertexIndex], 0.5, 1.0);
 }`,
         }),
         entryPoint: 'main',
@@ -35,7 +44,7 @@ fn main() -> @location(0) vec4f {
         targets: [{ format: 'bgra8unorm' }],
       },
       primitive: {
-        topology: 'point-list',
+        topology: 'triangle-list',
         cullMode: 'back',
         frontFace: 'cw',
       },
@@ -74,7 +83,7 @@ fn main() -> @location(0) vec4f {
     });
 
     passEncoder.setPipeline(this.pipeline);
-    passEncoder.draw(1);
+    passEncoder.draw(6);
 
     passEncoder.end();
     queue.submit([commanderEncoder.finish()]);

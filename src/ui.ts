@@ -11,6 +11,8 @@ import { DemoClusterForward } from './demos/clusterForward';
 import { DemoGravityParticles } from './demos/gravityParticles';
 import { DemoStructBuffer } from './demos/structBuffer';
 import { DemoCube } from './demos/cube';
+import { DemoSmallest } from './demos/smallest';
+import { DemoSmallestQuad } from './demos/smallestQuad';
 
 const refs = {
   planeLeft: document.getElementsByClassName('plane left').item(0) as HTMLDivElement,
@@ -38,6 +40,8 @@ const demos: Array<Demo> = [
   new DemoGravityParticles(),
   new DemoStructBuffer(),
   new DemoCube(),
+  new DemoSmallest(),
+  new DemoSmallestQuad(),
 ];
 
 // init demo list
