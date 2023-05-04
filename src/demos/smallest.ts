@@ -1,35 +1,10 @@
 import { canvasCtx, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
 import { Demo } from './demo';
-import vertShaderCode from '../shaders/triangle.vert.wgsl?raw';
-import fragShaderCode from '../shaders/triangle.frag.wgsl?raw';
-import preview from '../assets/screenshots/triangle.png';
-
-// prettier-ignore
-const positions = new Float32Array([
-  1.0, -1.0, 0.0, 
-  -1.0, -1.0, 0.0, 
-  0.0, 1.0, 0.0
-]);
-// prettier-ignore
-const colors = new Float32Array([
-  1.0, 0.0, 0.0, // 🔴
-  0.0, 1.0, 0.0, // 🟢
-  0.0, 0.0, 1.0, // 🔵
-]);
-const indices = new Uint16Array([0, 1, 2]);
-const uniformData = new Float32Array([
-  // ♟️ ModelViewProjection Matrix (Identity)
-  1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-  // 🔴 Primary Color
-  0.9, 0.1, 0.3, 1.0,
-  // 🟣 Accent Color
-  0.8, 0.2, 0.8, 1.0,
-]);
 
 export class DemoSmallest implements Demo {
   name = 'Smallest';
-  preview = preview;
+  preview = '';
   depthStencilTexture!: GPUTexture;
   depthStencilTextureView!: GPUTextureView;
   disposed = false;
@@ -63,11 +38,6 @@ fn main() -> @location(0) vec4f {
         topology: 'point-list',
         cullMode: 'back',
         frontFace: 'cw',
-      },
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus-stencil8',
       },
     });
 
@@ -114,21 +84,9 @@ fn main() -> @location(0) vec4f {
           storeOp: 'store',
         },
       ],
-      depthStencilAttachment: {
-        view: this.depthStencilTextureView,
-        depthClearValue: 1,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-        stencilClearValue: 0,
-        stencilLoadOp: 'clear',
-        stencilStoreOp: 'store',
-      },
     });
-    // const w = canvasCtx.canvas.width;
-    // const h = canvasCtx.canvas.height;
+
     passEncoder.setPipeline(this.pipeline);
-    // passEncoder.setViewport(0, 0, w, h, 0, 1);
-    // passEncoder.setScissorRect(0, 0, w, h);
     passEncoder.draw(1);
 
     passEncoder.end();
