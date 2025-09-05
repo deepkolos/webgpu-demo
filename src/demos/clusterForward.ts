@@ -1,12 +1,12 @@
 import { canvasCtx, canvasFormat, device, queue } from '../context';
 import { GenOptions, Refs } from '../ui';
-import { createBuffer, degToRad, Demo, getRotateAxis, randomBetween, sleep } from './demo';
+import { align, createBuffer, degToRad, Demo, getRotateAxis, randomBetween, sleep } from './demo';
 import ClusterAllInOneCode from '../shaders/cluster.all-in-one.wgsl?raw';
 import { mat3, mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { cubePrimitives } from '../assets/boxPrimitives';
 import * as BBO from 'buffer-backed-object';
 import { spherePrimitives } from '../assets/spherePrimitives';
-import preview from '../assets/screenshots/clusterforward.png'
+import preview from '../assets/screenshots/clusterforward.png';
 
 const colors = [
   [1, 0, 0],
@@ -19,11 +19,12 @@ const colors = [
 ];
 
 // https://github.com/GoogleChromeLabs/buffer-backed-object/issues/37
-const BBOVec3 = () => BBO.NestedBufferBackedObject({
-  x: BBO.Float32(),
-  y: BBO.Float32(),
-  z: BBO.Float32(),
-});
+const BBOVec3 = () =>
+  BBO.NestedBufferBackedObject({
+    x: BBO.Float32(),
+    y: BBO.Float32(),
+    z: BBO.Float32(),
+  });
 
 const vfov = degToRad(45);
 const DEPTH_FORMAT = 'depth24plus';
@@ -279,7 +280,7 @@ export class DemoClusterForward implements Demo {
     };
     this.bufferCreator = {
       view: () => {
-        const cpuBuffer = new Float32Array(16 + 16 + 2);
+        const cpuBuffer = new Float32Array(align(16 + 16 + 2, 4));
         const view = {
           matrix: new Float32Array(cpuBuffer.buffer, 0, 16), // camera's world matrix invert
           projection: new Float32Array(cpuBuffer.buffer, 16 * 4, 16),
@@ -289,6 +290,8 @@ export class DemoClusterForward implements Demo {
           cpuBuffer,
           GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
           false,
+          4,
+          'view',
         );
         return { gpuBuffer, cpuBuffer, view };
       },
@@ -305,6 +308,8 @@ export class DemoClusterForward implements Demo {
           cpuBuffer,
           GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
           false,
+          4,
+          'frustum',
         );
         return { gpuBuffer, cpuBuffer, view };
       },
@@ -322,11 +327,15 @@ export class DemoClusterForward implements Demo {
           cpuBuffer,
           GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
           false,
+          4,
+          'clusterBounds 0',
         );
         const stagingBuffer = createBuffer(
           cpuBuffer,
           GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
           false,
+          4,
+          'clusterBounds 1',
         );
         const read = async () => {
           await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -406,6 +415,8 @@ export class DemoClusterForward implements Demo {
           cpuBuffer,
           GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
           true,
+          4,
+          'globalLights',
         );
         return { gpuBuffer, cpuBuffer, view };
       },
@@ -437,6 +448,8 @@ export class DemoClusterForward implements Demo {
           cpuBuffer,
           GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
           false,
+          4,
+          'clusterLights',
         );
         const read = async () => {
           await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -464,6 +477,8 @@ export class DemoClusterForward implements Demo {
           cpuBuffer,
           GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
           false,
+          4,
+          'clusterIndices',
         );
         const read = async () => {
           await stagingBuffer.mapAsync(GPUMapMode.READ);
@@ -475,34 +490,34 @@ export class DemoClusterForward implements Demo {
       cubeVertex: () => {
         const cpuBuffer = new Float32Array(cubePrimitives.position);
         const view = {};
-        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true);
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true, 4, 'cubeVertex');
         return { gpuBuffer, cpuBuffer, view };
       },
       cubeIndices: () => {
         const cpuBuffer = new Uint32Array(cubePrimitives.indices);
         const view = {};
-        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.INDEX, true);
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.INDEX, true, 4, 'cubeIndices');
         return { gpuBuffer, cpuBuffer, view };
       },
       cubeNormal: () => {
         const cpuBuffer = new Float32Array(cubePrimitives.normal);
         const view = {};
-        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true);
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true, 4, 'cubeNormal');
         return { gpuBuffer, cpuBuffer, view };
       },
       sphereVertex: () => {
         const cpuBuffer = new Float32Array(spherePrimitives.position);
-        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true);
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true, 4, 'sphereVertex');
         return { gpuBuffer, cpuBuffer, view: {} };
       },
       sphereIndices: () => {
         const cpuBuffer = new Uint32Array(spherePrimitives.indices);
-        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.INDEX, true);
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.INDEX, true, 4, 'sphereIndices');
         return { gpuBuffer, cpuBuffer, view: {} };
       },
       sphereNormal: () => {
         const cpuBuffer = new Float32Array(spherePrimitives.normal);
-        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true);
+        const gpuBuffer = createBuffer(cpuBuffer, GPUBufferUsage.VERTEX, true, 4, 'sphereNormal');
         return { gpuBuffer, cpuBuffer, view: {} };
       },
     };
@@ -599,6 +614,8 @@ export class DemoClusterForward implements Demo {
         },
         depthStencil: {
           format: DEPTH_FORMAT,
+          depthWriteEnabled: true,
+          depthCompare: 'less',
         },
       }),
       sphere: device.createRenderPipeline({
@@ -775,7 +792,8 @@ export class DemoClusterForward implements Demo {
         const passEncoder = commandEncoder.beginComputePass();
         passEncoder.setPipeline(this.pipelines.clusterLights);
         passEncoder.setBindGroup(0, this.bindGroups.clusterLights);
-        passEncoder.dispatchWorkgroups(Math.ceil(clusterLen / 64));
+        const workgroupCount = Math.ceil(clusterLen / 64);
+        passEncoder.dispatchWorkgroups(workgroupCount);
         passEncoder.end();
         commandEncoder.copyBufferToBuffer(
           this.buffers.clusterLights.gpuBuffer,

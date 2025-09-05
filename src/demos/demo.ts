@@ -38,11 +38,13 @@ export function createBuffer(
   usage: GPUFlagsConstant,
   mappedAtCreation = false,
   alignment = 4,
+  label?: string,
 ) {
   const buffer = device.createBuffer({
     usage,
     size: align(data.byteLength, alignment),
     mappedAtCreation,
+    label
   });
   if (mappedAtCreation) {
     // @ts-ignore
